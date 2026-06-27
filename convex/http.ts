@@ -7,6 +7,8 @@ export const createReading = mutation({
   args: {
     sensor_id: v.string(),
     moisture: v.number(),
+    temperature: v.float64(),
+    light_level: v.number(),
     timestamp: v.string(),
   },
   handler: async (ctx, args) => {
@@ -17,6 +19,8 @@ export const createReading = mutation({
     const id = await ctx.db.insert("readings", {
       sensor_id: args.sensor_id,
       moisture: args.moisture,
+      temperature: args.temperature,
+      light_level: args.light_level,
       timestamp: args.timestamp,
     });
 
@@ -35,7 +39,13 @@ const http = httpRouter();
 
 function isReadingBody(
   value: unknown,
-): value is { sensor_id: string; moisture: number; timestamp: string } {
+): value is {
+  sensor_id: string;
+  moisture: number;
+  temperature: number;
+  light_level: number;
+  timestamp: string;
+} {
   if (typeof value !== "object" || value === null) {
     return false;
   }
@@ -46,6 +56,10 @@ function isReadingBody(
     typeof body.sensor_id === "string" &&
     typeof body.moisture === "number" &&
     Number.isFinite(body.moisture) &&
+    typeof body.temperature === "number" &&
+    Number.isFinite(body.temperature) &&
+    typeof body.light_level === "number" &&
+    Number.isFinite(body.light_level) &&
     typeof body.timestamp === "string"
   );
 }
@@ -60,7 +74,8 @@ http.route({
       if (!isReadingBody(body) || body.moisture < 0 || body.moisture > 100) {
         return new Response(
           JSON.stringify({
-            error: "Request body must contain sensor_id, moisture (0-100), and timestamp",
+            error:
+              "Request body must contain sensor_id, moisture (0-100), temperature, light_level, and timestamp",
           }),
           {
             status: 400,
