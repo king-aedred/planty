@@ -1,0 +1,12 @@
+# Backend
+backend/.env
+backend/__pycache__/
+backend/venv/
+
+# Frontend (später)
+frontend/node_modules/
+frontend/.next/
+
+# Firmware
+firmware/*.elf
+firmware/*.bin
