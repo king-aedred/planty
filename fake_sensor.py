@@ -1,14 +1,21 @@
 import random
-import time
+import os
 from datetime import datetime
 
 import httpx
+from dotenv import load_dotenv
 
 
-URL = "http://localhost:8000/readings"
 SENSOR_ID = "fake-sensor-001"
 TOTAL_MEASUREMENTS = 18
-SLEEP_SECONDS = 0
+
+
+def get_target_url() -> str:
+	load_dotenv()
+	convex_http_url = os.getenv("CONVEX_HTTP_URL")
+	if not convex_http_url:
+		raise RuntimeError("CONVEX_HTTP_URL is missing in .env")
+	return f"{convex_http_url.rstrip('/')}/readings"
 
 
 def clamp(value: float, minimum: float, maximum: float) -> float:
@@ -19,7 +26,7 @@ def build_payload(state: dict[str, float]) -> dict[str, object]:
 	state["moisture"] = clamp(state["moisture"] + random.randint(-2, 2), 0, 100)
 	state["temperature"] = clamp(state["temperature"] + random.uniform(-0.3, 0.3), 10, 35)
 	state["light_level"] = clamp(state["light_level"] + random.randint(-50, 50), 0, 2000)
-	timestamp = datetime.now().isoformat(timespec="minutes")
+	timestamp = datetime.now().isoformat(timespec="hours")
 	return {
 		"sensor_id": SENSOR_ID,
 		"moisture": int(round(state["moisture"])),
@@ -30,7 +37,8 @@ def build_payload(state: dict[str, float]) -> dict[str, object]:
 
 
 def main() -> None:
-	print(f"Fake sensor started, posting to {URL}")
+	url = get_target_url()
+	print(f"Fake sensor started, posting to {url}")
 	state = {
 		"moisture": float(random.randint(20, 80)),
 		"temperature": random.uniform(18, 24),
@@ -42,7 +50,7 @@ def main() -> None:
 			payload = build_payload(state)
 
 			try:
-				response = client.post(URL, json=payload)
+				response = client.post(url, json=payload)
 				status_code = response.status_code
 				print(f"Messung {measurement_number}/{TOTAL_MEASUREMENTS}")
 				print(
@@ -65,9 +73,6 @@ def main() -> None:
 					f"timestamp={payload['timestamp']}"
 				)
 				print(f"HTTP Status Code: request failed ({error})")
-
-			if measurement_number < TOTAL_MEASUREMENTS:
-				time.sleep(SLEEP_SECONDS)
 
 	print("Session abgeschlossen – 18 Messungen gesendet")
 

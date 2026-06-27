@@ -13,3 +13,6 @@ frontend/.next/
 firmware/*.elf
 firmware/*.bin
 .env.local
+
+# General
+.env

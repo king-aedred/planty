@@ -1,9 +1,4 @@
-import { ConvexHttpClient } from "convex/browser"
+import { ConvexHttpClient } from 'convex/browser'
+import { CONVEX_URL } from '../config.ts'
 
-const convexUrl = process.env.CONVEX_URL
-
-if (!convexUrl) {
-    throw new Error("CONVEX_URL is missing")
-}
-
-export const convex = new ConvexHttpClient(convexUrl)
+export const convex = new ConvexHttpClient(CONVEX_URL)
