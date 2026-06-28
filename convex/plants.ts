@@ -1,52 +1,65 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
-export const getPlantBySensorId = query({
+export const getPlantsByClerkId = query({
   args: {
-    sensor_id: v.string(),
+    clerk_id: v.string(),
   },
   handler: async (ctx, args) => {
-    const plant = await ctx.db
+    return await ctx.db
       .query("plants")
-      .filter((q) => q.eq(q.field("sensor_id"), args.sensor_id))
-      .first();
+      .withIndex("by_clerk_id", (q) => q.eq("clerk_id", args.clerk_id))
+      .collect();
+  },
+});
 
-    return plant;
+export const getPlantByDeviceId = query({
+  args: {
+    device_id: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("plants")
+      .withIndex("by_device_id", (q) => q.eq("device_id", args.device_id))
+      .first();
   },
 });
 
 export const createPlant = mutation({
   args: {
-    sensor_id: v.string(),
+    clerk_id: v.string(),
+    device_id: v.string(),
     name: v.string(),
   },
   handler: async (ctx, args) => {
-    const createdAt = Date.now();
+    const existingPlant = await ctx.db
+      .query("plants")
+      .withIndex("by_device_id", (q) => q.eq("device_id", args.device_id))
+      .first();
 
-    const id = await ctx.db.insert("plants", {
-      sensor_id: args.sensor_id,
+    if (existingPlant) {
+      throw new Error("Sensor already registered");
+    }
+
+    return await ctx.db.insert("plants", {
+      clerk_id: args.clerk_id,
+      device_id: args.device_id,
       name: args.name,
-      created_at: createdAt,
+      created_at: Date.now(),
     });
-
-    return { ok: true, id };
   },
 });
 
 export const getLatestSummary = query({
   args: {
-    sensor_id: v.string(),
+    device_id: v.string(),
   },
   handler: async (ctx, args) => {
     const summaries = await ctx.db
       .query("daily_summaries")
-      .filter((q) => q.eq(q.field("sensor_id"), args.sensor_id))
+      .filter((q) => q.eq(q.field("sensor_id"), args.device_id))
       .collect();
 
-    const latestSummary = summaries
-      .slice()
-      .sort((left, right) => right.created_at - left.created_at)[0] ?? null;
-
-    return latestSummary;
+    return summaries.slice().sort((left, right) => right.created_at - left.created_at)[0] ?? null;
   },
 });

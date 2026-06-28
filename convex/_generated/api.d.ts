@@ -11,6 +11,8 @@
 import type * as http from "../http.js";
 import type * as plants from "../plants.js";
 import type * as readings from "../readings.js";
+import type * as sensors from "../sensors.js";
+import type * as users from "../users.js";
 
 import type {
   ApiFromModules,
@@ -22,6 +24,8 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   plants: typeof plants;
   readings: typeof readings;
+  sensors: typeof sensors;
+  users: typeof users;
 }>;
 
 /**

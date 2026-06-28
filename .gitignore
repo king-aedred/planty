@@ -2,8 +2,67 @@
 backend/.env
 backend/node_modules/
 
-# Mobile
+# Dependencies
+node_modules/
 mobile/node_modules/
+frontend/node_modules/
+
+# Expo / React Native
+.expo/
+mobile/.expo/
+.vscode/
+mobile/.vscode/
+dist/
+mobile/dist/
+web-build/
+mobile/web-build/
+expo-env.d.ts
+mobile/expo-env.d.ts
+.metro-health-check*
+mobile/.metro-health-check*
+
+# Native / platform output
+.kotlin/
+mobile/.kotlin/
+ios/
+android/
+mobile/ios/
+mobile/android/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Debug / temp files
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+mobile/npm-debug.*
+mobile/yarn-debug.*
+mobile/yarn-error.*
+
+# macOS / misc
+.DS_Store
+mobile/.DS_Store
+*.pem
+mobile/*.pem
+
+# Local env files
+.env
+.env.local
+.env*.local
+mobile/.env
+mobile/.env*.local
+
+# TypeScript
+*.tsbuildinfo
+mobile/*.tsbuildinfo
+
+# Expo template leftovers
+app-example
+mobile/app-example
 
 # Frontend (später)
 frontend/node_modules/
@@ -12,7 +71,4 @@ frontend/.next/
 # Firmware
 firmware/*.elf
 firmware/*.bin
-.env.local
 
-# General
-.env
