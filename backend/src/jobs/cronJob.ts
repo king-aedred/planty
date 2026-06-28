@@ -17,14 +17,20 @@ const getSensorIdsNeedingProcessing = async (date: string): Promise<string[]> =>
     })
 }
 
-export const runCronJobOnce = async (): Promise<void> => {
+export const runCronJobOnce = async (): Promise<Array<{ sensor_id: string; result: unknown }>> => {
     const date = getTodayDate()
     const sensorIds = await getSensorIdsNeedingProcessing(date)
+
+    const results: Array<{ sensor_id: string; result: unknown }> = []
 
     for (const sensorId of sensorIds) {
         const result = await processSessionIfReady(sensorId, date)
         console.log(`[cronJob] sensor_id=${sensorId} date=${date}`, result)
+
+        results.push({ sensor_id: sensorId, result })
     }
+
+    return results
 }
 
 export const startCronJob = (): cron.ScheduledTask => {

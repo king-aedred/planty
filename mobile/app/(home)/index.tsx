@@ -1,28 +1,25 @@
-import { Colors } from '@/constants/colors'
 import { api } from '../../../convex/_generated/api'
+import { Redirect } from 'expo-router'
 import { useMutation, useQuery } from 'convex/react'
 import { useEffect, useRef } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
-
-const colors = Colors.dark
 
 export default function Page() {
-  return <HomeContent />
-}
-
-function HomeContent() {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { useClerk, useUser } = require('@clerk/expo') as typeof import('@clerk/expo')
+  const { useUser } = require('@clerk/expo') as typeof import('@clerk/expo')
   const { user, isLoaded, isSignedIn } = useUser()
-  const { signOut } = useClerk()
-  const createUser = useMutation(api.users.createUser)
-  const hasCreatedUserRef = useRef(false)
 
   const clerkId = user?.id ?? ''
   const email = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses[0]?.emailAddress ?? ''
+  const createUser = useMutation(api.users.createUser)
+  const hasCreatedUserRef = useRef(false)
 
   const existingUser = useQuery(
     api.users.getUserByClerkId,
+    isLoaded && isSignedIn && clerkId ? { clerk_id: clerkId } : 'skip',
+  )
+
+  const plants = useQuery(
+    api.plants.getPlantsByClerkId,
     isLoaded && isSignedIn && clerkId ? { clerk_id: clerkId } : 'skip',
   )
 
@@ -44,71 +41,16 @@ function HomeContent() {
     return null
   }
 
-  return (
-    <View style={styles.container}>
-      <View style={styles.hero}>
-        <Text style={styles.eyebrow}>Planty</Text>
-        <Text style={styles.title}>Erfolgreich eingeloggt</Text>
-        <Text style={styles.subtitle}>{email}</Text>
-        <Text style={styles.syncText}>
-          {existingUser === undefined ? 'Prüfe Planty-Profil…' : existingUser ? 'Planty-Profil vorhanden' : 'Planty-Profil wird angelegt…'}
-        </Text>
-      </View>
+  if (!plants) {
+    return null
+  }
 
-      <Pressable style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]} onPress={() => signOut()}>
-        <Text style={styles.buttonText}>Sign out</Text>
-      </Pressable>
-    </View>
-  )
+  const firstPlant = plants[0]
+  const deviceId = firstPlant?.device_id ?? firstPlant?.sensor_id ?? ''
+
+  if (!firstPlant || !deviceId) {
+    return <Redirect href="/(home)/onboarding" />
+  }
+
+  return <Redirect href={{ pathname: '/(home)/status', params: { device_id: deviceId, name: firstPlant.name } }} />
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-    padding: 20,
-    justifyContent: 'space-between',
-  },
-  hero: {
-    flex: 1,
-    justifyContent: 'center',
-    gap: 12,
-  },
-  eyebrow: {
-    color: colors.accent,
-    textTransform: 'uppercase',
-    letterSpacing: 2,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  title: {
-    color: colors.text,
-    fontSize: 32,
-    fontWeight: '800',
-  },
-  subtitle: {
-    color: colors.muted,
-    fontSize: 16,
-    lineHeight: 22,
-  },
-  syncText: {
-    color: colors.muted,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  button: {
-    backgroundColor: colors.accent,
-    borderRadius: 18,
-    paddingVertical: 15,
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  buttonPressed: {
-    opacity: 0.85,
-  },
-  buttonText: {
-    color: colors.accentText,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-})

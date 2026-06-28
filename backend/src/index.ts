@@ -1,14 +1,19 @@
 import { Hono } from 'hono'
 import { serve } from '@hono/node-server'
-import readingsRouter from './routes/readings.js'
 import { convex } from './lib/convex.js'
+import { CRON_SCHEDULE_ENABLED } from './config.js'
 import { startCronJob } from './jobs/cronJob.js'
+import devModeRouter from './routes/devmode.js'
 
 const convexApiPromise = import('../../convex/_generated/api.js')
 
 const app = new Hono() //initialisiere ein App Objekt (in dem Fall Hono)
 
-startCronJob()
+if (CRON_SCHEDULE_ENABLED) {
+    startCronJob()
+} else {
+    console.log('Cron scheduler disabled; manual dev trigger only')
+}
 
 app.get('/', (c) => { // get() definiert eine HTTP GET-Route am angegebenen Pfad, '/' heißt also direkt unterm Root
     return c.text('Planty Backend Running') // (c) ist kontext und enthält daten der http request und liefert respone möglichkeiten wie text()
@@ -32,13 +37,14 @@ app.get('/api/status/:sensor_id/:date', async (c) => {
     return c.json(summary)
 })
 
-app.route('/api', readingsRouter) //alle Routen aus readingsRouter werden unter /api verfügbar
+app.route('/dev', devModeRouter)
 
-const port = 3001
+const port = 3000
 
 console.log(`Server running on http://localhost:${port}`)
 
 serve({
     fetch: app.fetch, //starte http server auf port 3000, wenn anfrage kommt gib sie app.fetch, das ist die hono app
     port, //fetch holt die Anfrage wie get oder post und verarbeitet sie
+    hostname: '0.0.0.0',
 })

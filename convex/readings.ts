@@ -60,6 +60,30 @@ export const getSensorsWithReadingsToday = query({
   },
 })
 
+export const getSensorIdsWithReadingsToday = query({
+  args: {
+    date: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const readings = await ctx.db
+      .query("readings")
+      .withIndex("by_timestamp", (q) =>
+        q.gte("timestamp", args.date).lt("timestamp", `${args.date}\uffff`),
+      )
+      .collect()
+
+    const sensorIds = new Set<string>()
+
+    for (const reading of readings) {
+      if (reading.timestamp.startsWith(args.date)) {
+        sensorIds.add(reading.sensor_id)
+      }
+    }
+
+    return Array.from(sensorIds)
+  },
+})
+
 export const getSummaryBySensorAndDate = query({
   args: {
     sensor_id: v.string(),
@@ -116,6 +140,29 @@ export const createDailySummary = mutation({
     })
 
     return { ok: true, id }
+  },
+})
+
+export const deleteDailySummaryBySensorAndDate = mutation({
+  args: {
+    sensor_id: v.string(),
+    date: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const summary = await ctx.db
+      .query("daily_summaries")
+      .withIndex("by_sensor_and_date", (q) =>
+        q.eq("sensor_id", args.sensor_id).eq("date", args.date),
+      )
+      .first()
+
+    if (!summary) {
+      return { ok: true, deleted: false }
+    }
+
+    await ctx.db.delete(summary._id)
+
+    return { ok: true, deleted: true }
   },
 })
 

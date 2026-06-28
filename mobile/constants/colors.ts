@@ -12,6 +12,12 @@ export const Colors = {
     accent: '#0A7EA4',
     accentText: '#FFFFFF',
     danger: '#C62828',
+    critical: '#C62828',
+    criticalText: '#FFFFFF',
+    warning: '#C77700',
+    warningText: '#FFFFFF',
+    success: '#2E7D32',
+    successText: '#FFFFFF',
   },
   dark: {
     text: '#F2F5F3',
@@ -26,6 +32,12 @@ export const Colors = {
     accent: '#7FD38A',
     accentText: '#07210E',
     danger: '#FF8C8C',
+    critical: '#FF8C8C',
+    criticalText: '#3A0909',
+    warning: '#F0A44B',
+    warningText: '#2C1500',
+    success: '#7FD38A',
+    successText: '#07210E',
   },
 } as const
 

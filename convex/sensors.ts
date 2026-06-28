@@ -24,7 +24,7 @@ export const registerSensor = mutation({
       .first();
 
     if (existingSensor) {
-      return existingSensor._id;
+      throw new Error("Sensor already registered");
     }
 
     const createdAt = Date.now();

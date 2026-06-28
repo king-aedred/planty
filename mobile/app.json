@@ -40,6 +40,14 @@
           }
         }
       ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
       "@clerk/expo",
       "expo-secure-store",
       "expo-web-browser"

@@ -57,8 +57,27 @@ const parseNumberEnv = (value: string | undefined, defaultValue: number): number
     return parsed
 }
 
+const parseBooleanEnv = (value: string | undefined, defaultValue: boolean): boolean => {
+    if (value === undefined || value.trim() === '') {
+        return defaultValue
+    }
+
+    const normalized = value.trim().toLowerCase()
+
+    if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+        return true
+    }
+
+    if (['0', 'false', 'no', 'off'].includes(normalized)) {
+        return false
+    }
+
+    throw new Error(`Invalid boolean environment value: ${value}`)
+}
+
 export const CRON_INTERVAL_MINUTES = parseNumberEnv(nodeProcess?.env.CRON_INTERVAL_MINUTES, 60)
 export const MIN_READINGS_REQUIRED = parseNumberEnv(nodeProcess?.env.MIN_READINGS_REQUIRED, 12)
+export const CRON_SCHEDULE_ENABLED = parseBooleanEnv(nodeProcess?.env.CRON_SCHEDULE_ENABLED, true)
 
 const convexUrl = nodeProcess?.env.CONVEX_URL
 
