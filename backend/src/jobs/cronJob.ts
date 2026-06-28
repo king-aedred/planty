@@ -12,29 +12,9 @@ const getTodayDate = (): string => {
 const getSensorIdsNeedingProcessing = async (date: string): Promise<string[]> => {
     const { api } = await convexApiPromise
 
-    const readings = await convex.query(api.http.getReadings, {})
-    const sensorIds = new Set<string>()
-
-    for (const reading of readings) {
-        if (typeof reading.timestamp === 'string' && reading.timestamp.startsWith(date)) {
-            sensorIds.add(reading.sensor_id)
-        }
-    }
-
-    const sensorIdsWithoutSummary: string[] = []
-
-    for (const sensorId of sensorIds) {
-        const summary = await convex.query(api.readings.getSummaryBySensorAndDate, {
-            sensor_id: sensorId,
-            date,
-        })
-
-        if (!summary) {
-            sensorIdsWithoutSummary.push(sensorId)
-        }
-    }
-
-    return sensorIdsWithoutSummary
+    return await convex.query(api.readings.getSensorsWithReadingsToday, {
+        date,
+    })
 }
 
 export const runCronJobOnce = async (): Promise<void> => {

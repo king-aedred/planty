@@ -8,7 +8,9 @@ export default defineSchema({
     temperature: v.float64(),
     light_level: v.number(),
     timestamp: v.string(),
-  }),
+  })
+    .index("by_sensor_and_date", ["sensor_id", "timestamp"])
+    .index("by_timestamp", ["timestamp"]),
 
   plants: defineTable({
     sensor_id: v.string(),
@@ -38,5 +40,5 @@ export default defineSchema({
       v.literal("bright"),
     ),
     created_at: v.number(),
-  }),
+  }).index("by_sensor_and_date", ["sensor_id", "date"]),
 });

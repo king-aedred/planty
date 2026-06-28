@@ -2,18 +2,62 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 export const getReadingsBySensorAndDate = query({
-    args: {
-        sensor_id: v.string(),
-        date: v.string(),
-    },
-    handler: async (ctx, args) => {
-      const readings = await ctx.db
-        .query("readings")
-        .filter((q) => q.eq(q.field("sensor_id"), args.sensor_id))
-        .collect()
+  args: {
+    sensor_id: v.string(),
+    date: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const readings = await ctx.db
+      .query("readings")
+      .withIndex("by_sensor_and_date", (q) =>
+        q
+          .eq("sensor_id", args.sensor_id)
+          .gte("timestamp", args.date)
+          .lt("timestamp", `${args.date}\uffff`),
+      )
+      .collect()
 
-      return readings.filter((reading) => reading.timestamp.startsWith(args.date));
-    },
+    return readings.filter((reading) => reading.timestamp.startsWith(args.date))
+  },
+})
+
+export const getSensorsWithReadingsToday = query({
+  args: {
+    date: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const readings = await ctx.db
+      .query("readings")
+      .withIndex("by_timestamp", (q) =>
+        q.gte("timestamp", args.date).lt("timestamp", `${args.date}\uffff`),
+      )
+      .collect()
+
+    const sensorIds = new Set<string>()
+
+    for (const reading of readings) {
+      if (reading.timestamp.startsWith(args.date)) {
+        sensorIds.add(reading.sensor_id)
+      }
+    }
+
+    const sensorIdsWithoutSummary: string[] = []
+
+    for (const sensorId of sensorIds) {
+      const summary = await ctx.db
+        .query("daily_summaries")
+        .withIndex("by_sensor_and_date", (q) =>
+          q.eq("sensor_id", sensorId).eq("date", args.date),
+        )
+        .first()
+
+      if (!summary) {
+        sensorIdsWithoutSummary.push(sensorId)
+      }
+    }
+
+    return sensorIdsWithoutSummary
+  },
 })
 
 export const getSummaryBySensorAndDate = query({
@@ -24,11 +68,8 @@ export const getSummaryBySensorAndDate = query({
   handler: async (ctx, args) => {
     const summary = await ctx.db
       .query("daily_summaries")
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("sensor_id"), args.sensor_id),
-          q.eq(q.field("date"), args.date),
-        ),
+      .withIndex("by_sensor_and_date", (q) =>
+        q.eq("sensor_id", args.sensor_id).eq("date", args.date),
       )
       .first()
 
@@ -86,7 +127,12 @@ export const deleteReadingsBySensorAndDate = mutation({
   handler: async (ctx, args) => {
     const readings = await ctx.db
       .query("readings")
-      .filter((q) => q.eq(q.field("sensor_id"), args.sensor_id))
+      .withIndex("by_sensor_and_date", (q) =>
+        q
+          .eq("sensor_id", args.sensor_id)
+          .gte("timestamp", args.date)
+          .lt("timestamp", `${args.date}\uffff`),
+      )
       .collect()
 
     const readingsToDelete = readings.filter((reading) =>
