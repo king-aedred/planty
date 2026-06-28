@@ -28,13 +28,15 @@ export default defineSchema({
     .index("by_timestamp", ["timestamp"]),
 
   plants: defineTable({
-    device_id: v.string(),
-    clerk_id: v.string(),
+    device_id: v.optional(v.string()),
+    sensor_id: v.optional(v.string()),
+    clerk_id: v.optional(v.string()),
     name: v.string(),
     created_at: v.number(),
   })
     .index("by_clerk_id", ["clerk_id"])
-    .index("by_device_id", ["device_id"]),
+    .index("by_device_id", ["device_id"])
+    .index("by_sensor_id", ["sensor_id"]),
 
   daily_summaries: defineTable({
     sensor_id: v.string(),

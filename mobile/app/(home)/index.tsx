@@ -1,4 +1,7 @@
 import { Colors } from '@/constants/colors'
+import { api } from '../../../convex/_generated/api'
+import { useMutation, useQuery } from 'convex/react'
+import { useEffect, useRef } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 const colors = Colors.dark
@@ -12,12 +15,34 @@ function HomeContent() {
   const { useClerk, useUser } = require('@clerk/expo') as typeof import('@clerk/expo')
   const { user, isLoaded, isSignedIn } = useUser()
   const { signOut } = useClerk()
+  const createUser = useMutation(api.users.createUser)
+  const hasCreatedUserRef = useRef(false)
+
+  const clerkId = user?.id ?? ''
+  const email = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses[0]?.emailAddress ?? ''
+
+  const existingUser = useQuery(
+    api.users.getUserByClerkId,
+    isLoaded && isSignedIn && clerkId ? { clerk_id: clerkId } : 'skip',
+  )
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !clerkId) {
+      return
+    }
+
+    if (existingUser === undefined || existingUser !== null || hasCreatedUserRef.current || !email) {
+      return
+    }
+
+    hasCreatedUserRef.current = true
+
+    void createUser({ clerk_id: clerkId, email })
+  }, [clerkId, createUser, email, existingUser, isLoaded, isSignedIn])
 
   if (!isLoaded || !isSignedIn) {
     return null
   }
-
-  const email = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses[0]?.emailAddress ?? ''
 
   return (
     <View style={styles.container}>
@@ -25,6 +50,9 @@ function HomeContent() {
         <Text style={styles.eyebrow}>Planty</Text>
         <Text style={styles.title}>Erfolgreich eingeloggt</Text>
         <Text style={styles.subtitle}>{email}</Text>
+        <Text style={styles.syncText}>
+          {existingUser === undefined ? 'Prüfe Planty-Profil…' : existingUser ? 'Planty-Profil vorhanden' : 'Planty-Profil wird angelegt…'}
+        </Text>
       </View>
 
       <Pressable style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]} onPress={() => signOut()}>
@@ -62,6 +90,11 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 16,
     lineHeight: 22,
+  },
+  syncText: {
+    color: colors.muted,
+    fontSize: 14,
+    lineHeight: 20,
   },
   button: {
     backgroundColor: colors.accent,

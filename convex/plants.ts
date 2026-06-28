@@ -18,9 +18,18 @@ export const getPlantByDeviceId = query({
     device_id: v.string(),
   },
   handler: async (ctx, args) => {
-    return await ctx.db
+    const plantByDeviceId = await ctx.db
       .query("plants")
       .withIndex("by_device_id", (q) => q.eq("device_id", args.device_id))
+      .first();
+
+    if (plantByDeviceId) {
+      return plantByDeviceId;
+    }
+
+    return await ctx.db
+      .query("plants")
+      .withIndex("by_sensor_id", (q) => q.eq("sensor_id", args.device_id))
       .first();
   },
 });
@@ -37,13 +46,21 @@ export const createPlant = mutation({
       .withIndex("by_device_id", (q) => q.eq("device_id", args.device_id))
       .first();
 
-    if (existingPlant) {
+    const legacyPlant = existingPlant
+      ? null
+      : await ctx.db
+          .query("plants")
+          .withIndex("by_sensor_id", (q) => q.eq("sensor_id", args.device_id))
+          .first();
+
+    if (existingPlant || legacyPlant) {
       throw new Error("Sensor already registered");
     }
 
     return await ctx.db.insert("plants", {
       clerk_id: args.clerk_id,
       device_id: args.device_id,
+      sensor_id: args.device_id,
       name: args.name,
       created_at: Date.now(),
     });
