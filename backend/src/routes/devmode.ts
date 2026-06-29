@@ -189,6 +189,10 @@ devModeRouter.post('/simulate', async (c) => {
   for (const reading of readings) {
     const result = (await convex.mutation(api.http.createReading, reading)) as { ok: true; id: string }
     insertedIds.push(result.id)
+
+    await convex.mutation(api.sensors.updateLastSeen, {
+      device_id: deviceId,
+    })
   }
 
   if (scenario === 'offline') {

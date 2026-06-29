@@ -86,6 +86,9 @@ http.route({ //reagiert auf POSTs auf /readings
             }
 
             const result = await ctx.runMutation(api.http.createReading, body)
+            await ctx.runMutation(api.sensors.updateLastSeen, {
+                device_id: body.sensor_id,
+            })
 
             return new Response(JSON.stringify(result), {
                 status: 201,

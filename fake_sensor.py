@@ -26,7 +26,7 @@ def build_payload(state: dict[str, float]) -> dict[str, object]:
 	state["moisture"] = clamp(state["moisture"] + random.randint(-2, 2), 0, 100)
 	state["temperature"] = clamp(state["temperature"] + random.uniform(-0.3, 0.3), 10, 35)
 	state["light_level"] = clamp(state["light_level"] + random.randint(-50, 50), 0, 2000)
-	timestamp = datetime.now().isoformat(timespec="hours")
+	timestamp = datetime.now().isoformat(timespec="seconds")
 	return {
 		"sensor_id": SENSOR_ID,
 		"moisture": int(round(state["moisture"])),
