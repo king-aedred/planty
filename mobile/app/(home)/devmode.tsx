@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -47,6 +48,31 @@ type ProbeAttempt = {
   status?: number
 }
 
+type DevTab = 'single' | 'multi'
+
+type ScenarioKey =
+  | 'normal'
+  | 'minimal'
+  | 'insufficient'
+  | 'all_critical'
+  | 'all_ok'
+  | 'all_warning'
+  | 'duplicate'
+  | 'offline'
+
+type PlantRow = {
+  _id: string | { toString(): string }
+  name: string
+  device_id?: string | null
+  sensor_id?: string | null
+}
+
+type SensorPlant = {
+  id: string
+  name: string
+  deviceId: string
+}
+
 export default function DevModeScreen() {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { useUser } = require('@clerk/expo') as typeof import('@clerk/expo')
@@ -54,9 +80,13 @@ export default function DevModeScreen() {
   const router = useRouter()
 
   const clerkId = user?.id ?? ''
-  const plantByClerk = useQuery(api.plants.getPlantsByClerkId, clerkId ? { clerk_id: clerkId } : 'skip')
+  const plants = useQuery(api.plants.getAllPlantsByClerkId, clerkId ? { clerk_id: clerkId } : 'skip')
   const isDevUser = useQuery(api.users.isDevUser, clerkId ? { clerk_id: clerkId } : 'skip')
 
+  const [activeTab, setActiveTab] = useState<DevTab>('single')
+  const [selectedSinglePlantId, setSelectedSinglePlantId] = useState('')
+  const [selectedMultiPlantIds, setSelectedMultiPlantIds] = useState<Record<string, boolean>>({})
+  const [selectedScenario, setSelectedScenario] = useState<ScenarioKey>('normal')
   const [devInfo, setDevInfo] = useState<DevInfo | null>(null)
   const [serverBaseUrl, setServerBaseUrl] = useState<string | null>(null)
   const [probeAttempts, setProbeAttempts] = useState<ProbeAttempt[]>([])
@@ -64,12 +94,55 @@ export default function DevModeScreen() {
   const [statusMessage, setStatusMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [requestDebug, setRequestDebug] = useState<RequestDebug | null>(null)
+  const [multiResults, setMultiResults] = useState<SensorResult[]>([])
+  const [isSingleDropdownOpen, setIsSingleDropdownOpen] = useState(false)
 
   const deviceId = useMemo(() => {
-    const firstPlant = plantByClerk?.[0]
+    const firstPlant = plants?.[0]
 
     return firstPlant?.device_id ?? firstPlant?.sensor_id ?? ''
-  }, [plantByClerk])
+  }, [plants])
+
+  const sensorPlants = useMemo<SensorPlant[]>(() => {
+    return ((plants ?? []) as PlantRow[])
+      .map((plant) => ({
+        id: String(plant._id),
+        name: plant.name,
+        deviceId: plant.device_id ?? plant.sensor_id ?? '',
+      }))
+      .filter((plant) => Boolean(plant.deviceId))
+  }, [plants])
+
+  const selectedSinglePlant = useMemo(
+    () => sensorPlants.find((plant) => plant.id === selectedSinglePlantId) ?? sensorPlants[0] ?? null,
+    [sensorPlants, selectedSinglePlantId],
+  )
+
+  useEffect(() => {
+    if (sensorPlants.length === 0) {
+      setSelectedSinglePlantId('')
+      setSelectedMultiPlantIds({})
+      return
+    }
+
+    setSelectedSinglePlantId((current) => {
+      if (current && sensorPlants.some((plant) => plant.id === current)) {
+        return current
+      }
+
+      return sensorPlants[0].id
+    })
+
+    setSelectedMultiPlantIds((current) => {
+      const nextSelection: Record<string, boolean> = {}
+
+      for (const plant of sensorPlants) {
+        nextSelection[plant.id] = current[plant.id] ?? true
+      }
+
+      return nextSelection
+    })
+  }, [sensorPlants])
 
   useEffect(() => {
     let cancelled = false
@@ -244,8 +317,8 @@ export default function DevModeScreen() {
     return null
   }
 
-  const sendScenario = async (scenario: string) => {
-    if (!deviceId || isLoading || !serverBaseUrl) {
+  const runScenarioRequest = async (targetDeviceId: string, scenario: string) => {
+    if (!targetDeviceId || !serverBaseUrl) {
       return
     }
 
@@ -271,7 +344,7 @@ export default function DevModeScreen() {
         },
         signal: controller.signal,
         body: JSON.stringify({
-          device_id: deviceId,
+          device_id: targetDeviceId,
           scenario,
         }),
       })
@@ -322,6 +395,127 @@ export default function DevModeScreen() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const sendScenario = async (targetDeviceId: string, scenario: string) => {
+    if (!targetDeviceId || isLoading) {
+      return
+    }
+
+    return await runScenarioRequest(targetDeviceId, scenario)
+  }
+
+  const simulateSensorRequest = async (plant: SensorPlant, scenario: ScenarioKey): Promise<SensorResult> => {
+    if (!serverBaseUrl) {
+      return {
+        deviceId: plant.deviceId,
+        plantName: plant.name,
+        ok: false,
+        errorMessage: 'Backend URL fehlt',
+      }
+    }
+
+    const url = `${serverBaseUrl}/dev/simulate`
+
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-clerk-id': clerkId,
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          device_id: plant.deviceId,
+          scenario,
+        }),
+      })
+
+      clearTimeout(timeout)
+
+      const responseBody = await response.json()
+      const responseText = JSON.stringify(responseBody, null, 2)
+
+      if (!response.ok) {
+        return {
+          deviceId: plant.deviceId,
+          plantName: plant.name,
+          ok: false,
+          status: response.status,
+          responseText,
+          errorMessage: responseBody?.error ?? 'Simulation fehlgeschlagen',
+        }
+      }
+
+      return {
+        deviceId: plant.deviceId,
+        plantName: plant.name,
+        ok: true,
+        status: response.status,
+        responseText,
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Simulation fehlgeschlagen'
+
+      return {
+        deviceId: plant.deviceId,
+        plantName: plant.name,
+        ok: false,
+        errorMessage,
+      }
+    }
+  }
+
+  const toggleMultiPlant = (plantId: string) => {
+    setSelectedMultiPlantIds((current) => ({
+      ...current,
+      [plantId]: !current[plantId],
+    }))
+  }
+
+  const handleMultiTest = async () => {
+    if (isLoading || !serverBaseUrl) {
+      return
+    }
+
+    const selectedPlants = sensorPlants.filter((plant) => selectedMultiPlantIds[plant.id])
+
+    if (selectedPlants.length === 0) {
+      setErrorMessage('Bitte wähle mindestens einen Sensor aus')
+      return
+    }
+
+    setIsLoading(true)
+    setStatusMessage('')
+    setErrorMessage('')
+    setMultiResults([])
+
+    const settledResults = await Promise.allSettled(
+      selectedPlants.map((plant) => simulateSensorRequest(plant, selectedScenario)),
+    )
+
+    const results: SensorResult[] = settledResults.map((settled, index) => {
+      const plant = selectedPlants[index]
+
+      if (settled.status === 'fulfilled') {
+        return settled.value
+      }
+
+      return {
+        deviceId: plant.deviceId,
+        plantName: plant.name,
+        ok: false,
+        errorMessage: settled.reason instanceof Error ? settled.reason.message : 'Simulation fehlgeschlagen',
+      }
+    })
+
+    setMultiResults(results)
+
+    setStatusMessage(`${results.filter((result) => result.ok).length}/${results.length} Sensor erfolgreich getestet`)
+    setIsLoading(false)
   }
 
   const triggerCron = async () => {
@@ -404,40 +598,195 @@ export default function DevModeScreen() {
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <View style={styles.container}>
-            <BurgerMenu deviceId={deviceId} />
+            <BurgerMenu deviceId={selectedSinglePlant?.deviceId || deviceId || undefined} />
 
             <View style={styles.hero}>
               <Text style={styles.eyebrow}>Planty</Text>
               <Text style={styles.title}>Dev Tools 🛠️</Text>
               <Text style={styles.meta}>Aktuelle User ID</Text>
               <Text style={styles.value}>{clerkId || 'Keine User ID gefunden'}</Text>
-              <Text style={styles.meta}>Aktuelle Device ID</Text>
-              <Text style={styles.value}>{deviceId || 'Keine Device ID gefunden'}</Text>
+              <Text style={styles.meta}>Aktive Device ID</Text>
+              <Text style={styles.value}>{selectedSinglePlant?.deviceId || deviceId || 'Keine Device ID gefunden'}</Text>
             </View>
 
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Sensor Simulieren</Text>
-              <View style={styles.buttonGrid}>
-                {scenarioButtons.map((button) => (
-                  <Pressable
-                    key={button.scenario}
-                    style={({ pressed }) => [styles.button, pressed && styles.buttonPressed, isLoading && styles.buttonDisabled]}
-                    disabled={isLoading}
-                    onPress={() => void sendScenario(button.scenario)}
-                  >
-                    <Text style={styles.buttonText}>{button.label}</Text>
-                  </Pressable>
-                ))}
+            <View style={styles.tabRow}>
+              <TabButton label="Single Sensor" active={activeTab === 'single'} onPress={() => setActiveTab('single')} />
+              <TabButton label="Multi Sensor" active={activeTab === 'multi'} onPress={() => setActiveTab('multi')} />
+            </View>
+
+            {activeTab === 'single' ? (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Single Sensor</Text>
+                <Text style={styles.helperText}>Wähle eine Pflanze mit Sensor aus und teste dann die vorhandenen Szenarien.</Text>
+
+                <View style={styles.dropdownBlock}>
+                  <Text style={styles.selectorLabel}>Sensor auswählen</Text>
+                  {selectedSinglePlant ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => setIsSingleDropdownOpen((current) => !current)}
+                      style={({ pressed }) => [styles.dropdownButton, pressed && styles.selectorCardPressed]}
+                    >
+                      <View style={styles.selectorCardCopy}>
+                        <Text style={styles.selectorCardTitle}>{selectedSinglePlant.name}</Text>
+                        <Text style={styles.selectorCardText}>{selectedSinglePlant.deviceId}</Text>
+                      </View>
+                      <Text style={styles.dropdownChevron}>{isSingleDropdownOpen ? '▴' : '▾'}</Text>
+                    </Pressable>
+                  ) : (
+                    <Text style={styles.helperText}>Keine Pflanzen mit Sensor gefunden.</Text>
+                  )}
+
+                  <Modal visible={isSingleDropdownOpen} transparent animationType="fade" onRequestClose={() => setIsSingleDropdownOpen(false)}>
+                    <Pressable style={styles.modalBackdrop} onPress={() => setIsSingleDropdownOpen(false)}>
+                      <Pressable style={styles.dropdownPanel} onPress={() => undefined}>
+                        <Text style={styles.dropdownTitle}>Sensor auswählen</Text>
+                        <View style={styles.selectorList}>
+                          {sensorPlants.map((plant) => {
+                            const isSelected = selectedSinglePlantId === plant.id
+
+                            return (
+                              <Pressable
+                                key={plant.id}
+                                accessibilityRole="button"
+                                onPress={() => {
+                                  setSelectedSinglePlantId(plant.id)
+                                  setIsSingleDropdownOpen(false)
+                                }}
+                                style={({ pressed }) => [
+                                  styles.selectorCard,
+                                  isSelected && styles.selectorCardSelected,
+                                  pressed && styles.selectorCardPressed,
+                                ]}
+                              >
+                                <View style={styles.selectorCardHeader}>
+                                  <View style={styles.selectorCardCopy}>
+                                    <Text style={styles.selectorCardTitle}>{plant.name}</Text>
+                                    <Text style={styles.selectorCardText}>{plant.deviceId}</Text>
+                                  </View>
+                                  <View style={isSelected ? styles.radioSelected : styles.radio} />
+                                </View>
+                              </Pressable>
+                            )
+                          })}
+                        </View>
+                      </Pressable>
+                    </Pressable>
+                  </Modal>
+                </View>
+
+                <View style={styles.buttonGrid}>
+                  {scenarioButtons.map((button) => (
+                    <Pressable
+                      key={button.scenario}
+                      style={({ pressed }) => [styles.button, pressed && styles.buttonPressed, isLoading && styles.buttonDisabled]}
+                      disabled={isLoading || !selectedSinglePlant?.deviceId}
+                      onPress={() => void sendScenario(selectedSinglePlant?.deviceId ?? '', button.scenario)}
+                    >
+                      <Text style={styles.buttonText}>{button.label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                <View style={styles.resultPanel}>
+                  <Text style={styles.resultTitle}>Ergebnis</Text>
+                  {statusMessage ? <Text style={styles.success}>{statusMessage}</Text> : <Text style={styles.helperText}>Noch kein Test ausgeführt.</Text>}
+                </View>
               </View>
+            ) : null}
 
-              <Pressable style={({ pressed }) => [styles.cronButton, pressed && styles.buttonPressed, isLoading && styles.buttonDisabled]} disabled={isLoading} onPress={triggerCron}>
-                <Text style={styles.cronButtonText}>Manuell CronJob triggern</Text>
-              </Pressable>
+            {activeTab === 'multi' ? (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Multi Sensor</Text>
+                <Text style={styles.helperText}>Alle ausgewählten Sensoren erhalten dasselbe Szenario. Die Ergebnisse erscheinen pro Sensor.</Text>
 
-              {isLoading ? <ActivityIndicator color={colors.accent} /> : null}
-              {statusMessage ? <Text style={styles.success}>{statusMessage}</Text> : null}
-              {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
-            </View>
+                <View style={styles.selectorList}>
+                  {sensorPlants.length > 0 ? (
+                    sensorPlants.map((plant) => {
+                      const selected = Boolean(selectedMultiPlantIds[plant.id])
+
+                      return (
+                        <Pressable
+                          key={plant.id}
+                          accessibilityRole="button"
+                          onPress={() => toggleMultiPlant(plant.id)}
+                          style={({ pressed }) => [
+                            styles.selectorCard,
+                            selected && styles.selectorCardSelected,
+                            pressed && styles.selectorCardPressed,
+                          ]}
+                        >
+                          <View style={styles.selectorCardHeader}>
+                            <View style={styles.selectorCardCopy}>
+                              <Text style={styles.selectorCardTitle}>{plant.name}</Text>
+                              <Text style={styles.selectorCardText}>{plant.deviceId}</Text>
+                            </View>
+                            <View style={selected ? styles.checkboxSelected : styles.checkbox} />
+                          </View>
+                        </Pressable>
+                      )
+                    })
+                  ) : (
+                    <Text style={styles.helperText}>Keine Pflanzen mit Sensor gefunden.</Text>
+                  )}
+                </View>
+
+                <View style={styles.scenarioPicker}>
+                  <Text style={styles.selectorLabel}>Szenario wählen</Text>
+                  <View style={styles.buttonGrid}>
+                    {scenarioButtons.map((button) => {
+                      const isSelected = selectedScenario === button.scenario
+
+                      return (
+                        <Pressable
+                          key={button.scenario}
+                          accessibilityRole="button"
+                          onPress={() => setSelectedScenario(button.scenario)}
+                          style={({ pressed }) => [
+                            styles.button,
+                            isSelected && styles.buttonSelected,
+                            pressed && styles.buttonPressed,
+                          ]}
+                        >
+                          <Text style={styles.buttonText}>{button.label}</Text>
+                        </Pressable>
+                      )
+                    })}
+                  </View>
+                </View>
+
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => void handleMultiTest()}
+                  disabled={isLoading || Object.values(selectedMultiPlantIds).every((value) => !value)}
+                  style={({ pressed }) => [styles.cronButton, pressed && styles.buttonPressed, isLoading && styles.buttonDisabled]}
+                >
+                  <Text style={styles.cronButtonText}>{isLoading ? 'Teste…' : 'Alle testen'}</Text>
+                </Pressable>
+
+                <View style={styles.resultPanel}>
+                  <Text style={styles.resultTitle}>Ergebnisse</Text>
+                  {multiResults.length > 0 ? (
+                    <View style={styles.resultList}>
+                      {multiResults.map((result) => (
+                        <View key={result.deviceId} style={styles.resultCard}>
+                          <View style={styles.resultHeader}>
+                            <Text style={styles.resultDeviceTitle}>{result.plantName}</Text>
+                            <Text style={styles.resultDeviceId}>{result.deviceId}</Text>
+                          </View>
+                          <Text style={result.ok ? styles.success : styles.error}>
+                            {result.ok ? 'OK' : result.errorMessage ?? 'Fehlgeschlagen'}
+                          </Text>
+                          {result.status ? <Text style={styles.resultMeta}>Status {result.status}</Text> : null}
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={styles.helperText}>Noch keine Mehrsensor-Tests ausgeführt.</Text>
+                  )}
+                </View>
+              </View>
+            ) : null}
 
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Dev Infos</Text>
@@ -448,7 +797,6 @@ export default function DevModeScreen() {
 
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Debug</Text>
-              <InfoRow label="Server URL" value={serverBaseUrl ?? SERVER_CANDIDATES[0]} />
               <InfoRow label="Request" value={requestDebug ? `${requestDebug.method} ${requestDebug.label}` : 'Noch kein Request'} />
               <InfoRow label="Status" value={requestDebug?.status ? String(requestDebug.status) : 'n/a'} />
               <InfoRow label="Error" value={requestDebug?.errorName ? `${requestDebug.errorName}: ${requestDebug.errorMessage ?? ''}` : 'n/a'} />
@@ -456,6 +804,13 @@ export default function DevModeScreen() {
               {probeAttempts.length > 0 ? <Text style={styles.debugBlock}>{probeAttempts.map((attempt) => `${attempt.url} -> ${attempt.status ?? `${attempt.errorName ?? 'Error'}: ${attempt.errorMessage ?? 'unknown'}`}`).join('\n')}</Text> : null}
               {requestDebug?.responseText ? <Text style={styles.debugBlock}>{requestDebug.responseText}</Text> : null}
             </View>
+
+            <Pressable style={({ pressed }) => [styles.cronButton, pressed && styles.buttonPressed, isLoading && styles.buttonDisabled]} disabled={isLoading} onPress={() => void triggerCron()}>
+              <Text style={styles.cronButtonText}>Manuell CronJob triggern</Text>
+            </Pressable>
+
+            {isLoading ? <ActivityIndicator color={colors.accent} /> : null}
+            {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -480,6 +835,26 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       <Text style={styles.meta}>{label}</Text>
       <Text style={styles.value}>{value}</Text>
     </View>
+  )
+}
+
+function TabButton({
+  label,
+  active,
+  onPress,
+}: {
+  label: string
+  active: boolean
+  onPress: () => void
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [styles.tabButton, active && styles.tabButtonActive, pressed && styles.tabButtonPressed]}
+    >
+      <Text style={active ? styles.tabButtonTextActive : styles.tabButtonText}>{label}</Text>
+    </Pressable>
   )
 }
 
@@ -518,6 +893,34 @@ const styles = StyleSheet.create({
     lineHeight: 38,
     marginBottom: 8,
   },
+  tabRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  tabButton: {
+    flex: 1,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  tabButtonActive: {
+    borderColor: colors.accent,
+    backgroundColor: '#123226',
+  },
+  tabButtonPressed: {
+    opacity: 0.92,
+  },
+  tabButtonText: {
+    color: colors.muted,
+    fontWeight: '700',
+  },
+  tabButtonTextActive: {
+    color: colors.accent,
+    fontWeight: '800',
+  },
   meta: {
     color: colors.muted,
     fontSize: 13,
@@ -538,6 +941,124 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '800',
   },
+  helperText: {
+    color: colors.muted,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  selectorLabel: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  selectorList: {
+    gap: 10,
+  },
+  dropdownBlock: {
+    gap: 10,
+  },
+  dropdownButton: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  dropdownChevron: {
+    color: colors.muted,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  dropdownPanel: {
+    backgroundColor: colors.background,
+    borderRadius: 22,
+    borderColor: colors.border,
+    borderWidth: 1,
+    padding: 16,
+    gap: 12,
+    maxHeight: '70%',
+  },
+  dropdownTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  selectorCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: 14,
+  },
+  selectorCardSelected: {
+    borderColor: colors.accent,
+  },
+  selectorCardPressed: {
+    opacity: 0.92,
+  },
+  selectorCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  selectorCardCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  selectorCardTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  selectorCardText: {
+    color: colors.muted,
+    fontSize: 13,
+  },
+  radio: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  radioSelected: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 5,
+    borderColor: colors.accent,
+  },
+  checkbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  checkboxSelected: {
+    width: 18,
+    height: 18,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    backgroundColor: colors.accent,
+  },
+  scenarioPicker: {
+    gap: 10,
+  },
   buttonGrid: {
     gap: 10,
   },
@@ -548,6 +1069,9 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingVertical: 14,
     paddingHorizontal: 14,
+  },
+  buttonSelected: {
+    borderColor: colors.accent,
   },
   cronButton: {
     backgroundColor: colors.accent,
@@ -574,7 +1098,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   success: {
-    color: '#7FD38A',
+    color: colors.success,
     backgroundColor: 'rgba(127, 211, 138, 0.12)',
     borderColor: 'rgba(127, 211, 138, 0.3)',
     borderWidth: 1,
@@ -583,13 +1107,57 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   error: {
-    color: '#FF8C8C',
+    color: colors.danger,
     backgroundColor: 'rgba(255, 140, 140, 0.12)',
     borderColor: 'rgba(255, 140, 140, 0.3)',
     borderWidth: 1,
     borderRadius: 16,
     padding: 12,
     lineHeight: 20,
+  },
+  resultPanel: {
+    gap: 10,
+    padding: 16,
+    borderRadius: 20,
+    borderColor: colors.border,
+    borderWidth: 1,
+    backgroundColor: colors.surface,
+  },
+  resultTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  resultList: {
+    gap: 10,
+  },
+  resultCard: {
+    borderRadius: 16,
+    padding: 14,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  resultHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  resultDeviceTitle: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  resultDeviceId: {
+    color: colors.muted,
+    fontSize: 12,
+  },
+  resultMeta: {
+    color: colors.muted,
+    fontSize: 13,
   },
   infoRow: {
     gap: 4,

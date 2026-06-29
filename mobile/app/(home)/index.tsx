@@ -19,7 +19,7 @@ export default function Page() {
   )
 
   const plants = useQuery(
-    api.plants.getPlantsByClerkId,
+    api.plants.getAllPlantsByClerkId,
     isLoaded && isSignedIn && clerkId ? { clerk_id: clerkId } : 'skip',
   )
 
@@ -45,12 +45,9 @@ export default function Page() {
     return null
   }
 
-  const firstPlant = plants[0]
-  const deviceId = firstPlant?.device_id ?? firstPlant?.sensor_id ?? ''
-
-  if (!firstPlant || !deviceId) {
+  if (plants.length === 0) {
     return <Redirect href="/(home)/onboarding" />
   }
 
-  return <Redirect href={{ pathname: '/(home)/status', params: { device_id: deviceId, name: firstPlant.name } }} />
+  return <Redirect href="/(home)/plant-list" />
 }

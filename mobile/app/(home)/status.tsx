@@ -17,37 +17,27 @@ export default function StatusScreen() {
   const { user } = useUser()
   const { signOut } = useAuth()
   const router = useRouter()
-  const params = useLocalSearchParams<{ device_id?: string; name?: string }>()
+  const params = useLocalSearchParams<{ plant_id?: string }>()
 
   const clerkId = user?.id ?? ''
-  const plantByClerk = useQuery(
-    api.plants.getPlantsByClerkId,
-    clerkId ? { clerk_id: clerkId } : 'skip',
-  )
+  const plants = useQuery(api.plants.getAllPlantsByClerkId, clerkId ? { clerk_id: clerkId } : 'skip')
 
   const resolvedPlant = useMemo(() => {
-    const routeDeviceId = typeof params.device_id === 'string' ? params.device_id : ''
-    const routeName = typeof params.name === 'string' ? params.name : ''
+    const routePlantId = typeof params.plant_id === 'string' ? params.plant_id : ''
 
-    if (routeDeviceId) {
-      return {
-        deviceId: routeDeviceId,
-        name: routeName || 'Deine Pflanze',
-      }
-    }
-
-    const firstPlant = plantByClerk?.[0]
+    const selectedPlant = routePlantId
+      ? plants?.find((plant) => String(plant._id) === routePlantId)
+      : plants?.[0]
 
     return {
-      deviceId: firstPlant?.device_id ?? firstPlant?.sensor_id ?? '',
-      name: firstPlant?.name ?? 'Deine Pflanze',
+      plantId: selectedPlant?._id ? String(selectedPlant._id) : routePlantId,
+      name: selectedPlant?.name ?? 'Deine Pflanze',
+      deviceId: selectedPlant?.device_id ?? selectedPlant?.sensor_id ?? null,
+      latestSummary: selectedPlant?.latestSummary ?? null,
     }
-  }, [params.device_id, params.name, plantByClerk])
+  }, [params.plant_id, plants])
 
-  const latestSummary = useQuery(
-    api.plants.getLatestSummary,
-    resolvedPlant.deviceId ? { device_id: resolvedPlant.deviceId } : 'skip',
-  )
+  const latestSummary = resolvedPlant.latestSummary
 
   const lastUpdatedText = latestSummary
     ? new Intl.DateTimeFormat('de-DE', {
@@ -66,12 +56,12 @@ export default function StatusScreen() {
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <View style={styles.container}>
-            <BurgerMenu deviceId={resolvedPlant.deviceId} />
+            <BurgerMenu deviceId={resolvedPlant.deviceId ?? undefined} />
             <View style={styles.headerRow}>
               <View style={styles.header}>
                 <Text style={styles.eyebrow}>Planty Status</Text>
                 <Text style={styles.title}>{resolvedPlant.name}</Text>
-                <Text style={styles.deviceId}>{resolvedPlant.deviceId || 'Keine Sensor-ID gefunden'}</Text>
+                <Text style={styles.deviceId}>{resolvedPlant.deviceId || 'Kein Sensor verbunden'}</Text>
               </View>
 
               <Pressable style={({ pressed }) => [styles.logoutButton, pressed && styles.logoutButtonPressed]} onPress={handleLogout}>
@@ -79,34 +69,50 @@ export default function StatusScreen() {
               </Pressable>
             </View>
 
-            {latestSummary ? (
+            {resolvedPlant.deviceId ? (
               <View style={styles.cardGrid}>
-                <MetricCard
-                  emoji="💧"
-                  title="Feuchtigkeit"
-                  value={`${formatValue(latestSummary.moisture_median)} %`}
-                  badgeLabel={latestSummary.moisture_state}
-                  badgeTone={moistureTone(latestSummary.moisture_state)}
-                />
-                <MetricCard
-                  emoji="🌡️"
-                  title="Temperatur"
-                  value={`${formatValue(latestSummary.temperature_median)} °C`}
-                  badgeLabel={latestSummary.temperature_state}
-                  badgeTone={temperatureTone(latestSummary.temperature_state)}
-                />
-                <MetricCard
-                  emoji="☀️"
-                  title="Licht"
-                  value={`${formatValue(latestSummary.light_level_median)} Lux`}
-                  badgeLabel={latestSummary.light_state}
-                  badgeTone={lightTone(latestSummary.light_state)}
-                />
+                {latestSummary ? (
+                  <>
+                    <MetricCard
+                      emoji="💧"
+                      title="Feuchtigkeit"
+                      value={`${formatValue(latestSummary.moisture_median)} %`}
+                      badgeLabel={latestSummary.moisture_state}
+                      badgeTone={moistureTone(latestSummary.moisture_state)}
+                    />
+                    <MetricCard
+                      emoji="🌡️"
+                      title="Temperatur"
+                      value={`${formatValue(latestSummary.temperature_median)} °C`}
+                      badgeLabel={latestSummary.temperature_state}
+                      badgeTone={temperatureTone(latestSummary.temperature_state)}
+                    />
+                    <MetricCard
+                      emoji="☀️"
+                      title="Licht"
+                      value={`${formatValue(latestSummary.light_level_median)} Lux`}
+                      badgeLabel={latestSummary.light_state}
+                      badgeTone={lightTone(latestSummary.light_state)}
+                    />
+                  </>
+                ) : (
+                  <View style={styles.emptyState}>
+                    <Text style={styles.emptyStateTitle}>Noch keine Daten</Text>
+                    <Text style={styles.emptyStateText}>Noch keine Daten – warte auf ersten Sensor-Report</Text>
+                  </View>
+                )}
               </View>
             ) : (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyStateTitle}>Noch keine Daten</Text>
-                <Text style={styles.emptyStateText}>Noch keine Daten – warte auf ersten Sensor-Report</Text>
+                <Text style={styles.emptyStateTitle}>Kein Sensor verbunden</Text>
+                <Text style={styles.emptyStateText}>Du kannst dieser Pflanze später einen Sensor zuweisen.</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  style={({ pressed }) => [styles.assignButton, pressed && styles.assignButtonPressed]}
+                  onPress={() => router.push('/(home)/add-plant')}
+                >
+                  <Text style={styles.assignButtonText}>Sensor zuweisen</Text>
+                </Pressable>
               </View>
             )}
 
@@ -335,6 +341,21 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     textAlign: 'center',
+  },
+  assignButton: {
+    marginTop: 6,
+    backgroundColor: colors.accent,
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
+  assignButtonPressed: {
+    opacity: 0.88,
+  },
+  assignButtonText: {
+    color: colors.accentText,
+    fontSize: 15,
+    fontWeight: '700',
   },
   footer: {
     marginTop: 'auto',

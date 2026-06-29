@@ -61,6 +61,11 @@ export default function BurgerMenu({ deviceId }: BurgerMenuProps) {
     router.push('/(home)/status')
   }
 
+  const navigateToPlantList = () => {
+    closeMenu()
+    router.push('/(home)/plant-list')
+  }
+
   const navigateToDevTools = () => {
     closeMenu()
     router.push('/(home)/devmode')
@@ -94,6 +99,10 @@ export default function BurgerMenu({ deviceId }: BurgerMenuProps) {
 
           <Pressable style={styles.menuItem} onPress={navigateToStatus}>
             <Text style={styles.menuItemText}>Status</Text>
+          </Pressable>
+
+          <Pressable style={styles.menuItem} onPress={navigateToPlantList}>
+            <Text style={styles.menuItemText}>Meine Pflanzen</Text>
           </Pressable>
 
           {isDevUser ? (
