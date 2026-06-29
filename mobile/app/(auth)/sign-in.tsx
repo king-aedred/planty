@@ -165,6 +165,14 @@ function SignInContent() {
     }
   }
 
+  const visibleErrors = Array.from(
+    new Set([
+      errors.fields.identifier?.message,
+      errors.fields.password?.message,
+      errorMessage,
+    ].filter((message): message is string => Boolean(message))),
+  )
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -201,10 +209,11 @@ function SignInContent() {
                   onChangeText={setPassword}
                 />
 
-                {errors.fields.identifier ? <Text style={styles.error}>{errors.fields.identifier.message}</Text> : null}
-                {errors.fields.password ? <Text style={styles.error}>{errors.fields.password.message}</Text> : null}
-
-                {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
+                {visibleErrors.map((message) => (
+                  <Text key={message} style={styles.error}>
+                    {message}
+                  </Text>
+                ))}
 
                 {verificationStrategy ? (
                   <>

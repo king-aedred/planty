@@ -73,7 +73,7 @@ export default function GlobalSettingsScreen() {
 
   const handleLogout = async () => {
     await signOut()
-    router.replace('/(auth)/sign-in')
+    router.replace('/(auth)/sign-in?logout=1')
   }
 
   const handleSave = async () => {

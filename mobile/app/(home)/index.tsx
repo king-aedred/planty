@@ -3,6 +3,7 @@ import { Redirect } from 'expo-router'
 import { useMutation, useQuery } from 'convex/react'
 import { useRouter } from 'expo-router'
 import React, { useEffect, useRef } from 'react'
+import { ActivityIndicator, StyleSheet, View } from 'react-native'
 
 class UnauthorizedRetryBoundary extends React.Component<
   {
@@ -82,12 +83,12 @@ function HomeContent() {
     void createUser({ clerk_id: clerkId, email })
   }, [clerkId, createUser, email, existingUser, isLoaded, isSignedIn])
 
-  if (!isLoaded || !isSignedIn) {
-    return null
+  if (!isLoaded || plants === undefined) {
+    return <LoadingScreen />
   }
 
-  if (!plants) {
-    return null
+  if (!isSignedIn) {
+    return <Redirect href="/(auth)/sign-in" />
   }
 
   if (plants.length === 0) {
@@ -96,3 +97,20 @@ function HomeContent() {
 
   return <Redirect href="/(home)/plant-list" />
 }
+
+function LoadingScreen() {
+  return (
+    <View style={styles.loadingScreen}>
+      <ActivityIndicator size="large" color="#7FD38A" />
+    </View>
+  )
+}
+
+const styles = StyleSheet.create({
+  loadingScreen: {
+    flex: 1,
+    backgroundColor: '#07130F',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+})

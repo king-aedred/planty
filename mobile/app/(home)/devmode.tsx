@@ -21,10 +21,16 @@ const colors = Colors.dark
 const REQUEST_TIMEOUT_MS = 8000
 
 type SensorResult = {
-  sensor_id: string
-  scenario: string
-  success: boolean
-  message: string
+  deviceId?: string
+  plantName?: string
+  ok?: boolean
+  errorMessage?: string
+  status?: number
+  responseText?: string
+  sensor_id?: string
+  scenario?: string
+  success?: boolean
+  message?: string
 }
 
 const SERVER_CANDIDATES = [

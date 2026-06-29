@@ -66,6 +66,11 @@ export default function BurgerMenu({ deviceId }: BurgerMenuProps) {
     router.push('/(home)/plant-list')
   }
 
+  const navigateToGlobalSettings = () => {
+    closeMenu()
+    router.push('/(home)/global-settings')
+  }
+
   const navigateToDevTools = () => {
     closeMenu()
     router.push('/(home)/devmode')
@@ -74,7 +79,7 @@ export default function BurgerMenu({ deviceId }: BurgerMenuProps) {
   const handleLogout = async () => {
     closeMenu()
     await signOut()
-    router.replace('/(auth)/sign-in')
+    router.replace('/(auth)/sign-in?logout=1')
   }
 
   return (
@@ -104,6 +109,10 @@ export default function BurgerMenu({ deviceId }: BurgerMenuProps) {
           <Pressable style={styles.menuItem} onPress={navigateToPlantList}>
             <Text style={styles.menuItemText}>Meine Pflanzen</Text>
           </Pressable>
+
+                  <Pressable style={styles.menuItem} onPress={navigateToGlobalSettings}>
+                    <Text style={styles.menuItemText}>⚙️ Einstellungen</Text>
+                  </Pressable>
 
           {isDevUser ? (
             <Pressable style={styles.menuItem} onPress={navigateToDevTools}>

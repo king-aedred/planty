@@ -13,9 +13,8 @@ type SummaryState = 'ok' | 'low' | 'critical' | 'cold' | 'hot' | 'dark' | 'brigh
 
 export default function StatusScreen() {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { useAuth, useUser } = require('@clerk/expo') as typeof import('@clerk/expo')
+  const { useUser } = require('@clerk/expo') as typeof import('@clerk/expo')
   const { user } = useUser()
-  const { signOut } = useAuth()
   const router = useRouter()
   const params = useLocalSearchParams<{ plant_id?: string }>()
 
@@ -46,11 +45,6 @@ export default function StatusScreen() {
       }).format(new Date(latestSummary.created_at))
     : ''
 
-  const handleLogout = async () => {
-    await signOut()
-    router.replace('/(auth)/sign-in')
-  }
-
   const handleOpenPlantSettings = () => {
     if (!resolvedPlant.plantId) {
       return
@@ -73,21 +67,6 @@ export default function StatusScreen() {
                 <Text style={styles.eyebrow}>Planty Status</Text>
                 <Text style={styles.title}>{resolvedPlant.name}</Text>
                 <Text style={styles.deviceId}>{resolvedPlant.deviceId || 'Kein Sensor verbunden'}</Text>
-              </View>
-
-              <View style={styles.headerActions}>
-                <Pressable
-                  accessibilityRole="button"
-                  style={({ pressed }) => [styles.settingsButton, pressed && styles.settingsButtonPressed]}
-                  onPress={handleOpenPlantSettings}
-                  disabled={!resolvedPlant.plantId}
-                >
-                  <Text style={styles.settingsButtonText}>⚙️ Pflanzen-Einstellungen</Text>
-                </Pressable>
-
-                <Pressable style={({ pressed }) => [styles.logoutButton, pressed && styles.logoutButtonPressed]} onPress={handleLogout}>
-                  <Text style={styles.logoutButtonText}>Logout</Text>
-                </Pressable>
               </View>
             </View>
 
@@ -137,6 +116,15 @@ export default function StatusScreen() {
                 </Pressable>
               </View>
             )}
+
+            <Pressable
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.settingsButton, pressed && styles.settingsButtonPressed]}
+              onPress={handleOpenPlantSettings}
+              disabled={!resolvedPlant.plantId}
+            >
+              <Text style={styles.settingsButtonText}>⚙️ Pflanzen-Einstellungen</Text>
+            </Pressable>
 
             <View style={styles.footer}>
               <Text style={styles.footerLabel}>Zuletzt aktualisiert</Text>
@@ -250,10 +238,6 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingTop: 8,
   },
-  headerActions: {
-    alignItems: 'flex-end',
-    gap: 10,
-  },
   header: {
     gap: 8,
     flex: 1,
@@ -276,38 +260,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-  logoutButton: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginTop: 2,
-  },
-  logoutButtonPressed: {
-    opacity: 0.8,
-  },
   settingsButton: {
-    backgroundColor: colors.surface,
+    width: '100%',
+    backgroundColor: 'transparent',
     borderColor: colors.border,
     borderWidth: 1,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 4,
   },
   settingsButtonPressed: {
     opacity: 0.84,
   },
   settingsButtonText: {
     color: colors.text,
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '800',
-  },
-  logoutButtonText: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '700',
   },
   cardGrid: {
     gap: 12,

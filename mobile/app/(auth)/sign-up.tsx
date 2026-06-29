@@ -24,7 +24,7 @@ export default function Page() {
 function SignUpContent() {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { useAuth, useSignUp } = require('@clerk/expo') as typeof import('@clerk/expo')
-  const { signUp, errors, fetchStatus } = useSignUp()
+  const { signUp, fetchStatus } = useSignUp()
   const { isSignedIn } = useAuth()
   const router = useRouter()
 
@@ -34,16 +34,15 @@ function SignUpContent() {
   const [passwordConfirmation, setPasswordConfirmation] = React.useState('')
   const [legalAccepted, setLegalAccepted] = React.useState(false)
   const [code, setCode] = React.useState('')
-  const [errorMessage, setErrorMessage] = React.useState('')
+  const [registrationError, setRegistrationError] = React.useState('')
+  const [verificationError, setVerificationError] = React.useState('')
   const [verificationRequested, setVerificationRequested] = React.useState(false)
 
   if (!signUp) {
     return null
   }
 
-  const isVerificationStep =
-    verificationRequested ||
-    (signUp.emailAddress !== null && signUp.verifications.emailAddress.status !== 'verified')
+  const isVerificationStep = verificationRequested
 
   const navigateToHome = (url: string) => {
     if (url.startsWith('http')) {
@@ -57,10 +56,11 @@ function SignUpContent() {
   }
 
   const handleSubmit = async () => {
-    setErrorMessage('')
+    setRegistrationError('')
+    setVerificationError('')
 
     if (password !== passwordConfirmation) {
-      setErrorMessage('Passwörter stimmen nicht überein.')
+      setRegistrationError('Passwörter stimmen nicht überein.')
       return
     }
 
@@ -73,24 +73,42 @@ function SignUpContent() {
       })
 
       if (error) {
-        setErrorMessage(error.message)
+        const clerkError = error as {
+          code?: string
+          errors?: Array<{ code?: string }>
+        }
+        const isPwnedPassword =
+          clerkError.code === 'form_password_pwned' ||
+          clerkError.errors?.some((entry) => entry.code === 'form_password_pwned')
+
+        if (isPwnedPassword) {
+          setRegistrationError('Dieses Passwort wurde in einer Datenpanne gefunden. Bitte wähle ein anderes Passwort.')
+          setVerificationRequested(false)
+          return
+        }
+
+        setRegistrationError(error.message)
         return
       }
 
+      setRegistrationError('')
+      setVerificationError('')
+
       const { error: sendCodeError } = await signUp.verifications.sendEmailCode()
+
       if (sendCodeError) {
-        setErrorMessage(sendCodeError.message)
+        setRegistrationError(sendCodeError.message)
         return
       }
 
       setVerificationRequested(true)
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Registrierung fehlgeschlagen.')
+      setRegistrationError(error instanceof Error ? error.message : 'Registrierung fehlgeschlagen.')
     }
   }
 
   const handleVerify = async () => {
-    setErrorMessage('')
+    setVerificationError('')
 
     try {
       const { error } = await signUp.verifications.verifyEmailCode({
@@ -98,46 +116,37 @@ function SignUpContent() {
       })
 
       if (error) {
-        setErrorMessage(`Code konnte nicht bestätigt werden: ${error.message}`)
-        return
-      }
-
-      if (signUp.status !== 'complete') {
-        setErrorMessage(
-          `Code akzeptiert, aber Clerk erwartet noch weitere Angaben. missing=${signUp.missingFields.join(', ') || 'unknown'}`,
-        )
+        setVerificationError(`Code konnte nicht bestätigt werden: ${error.message}`)
         return
       }
 
       const { error: finalizeError } = await signUp.finalize()
 
       if (finalizeError) {
-        setErrorMessage(`Konto konnte nicht abgeschlossen werden: ${finalizeError.message}`)
+        setVerificationError(`Konto konnte nicht abgeschlossen werden: ${finalizeError.message}`)
         return
       }
 
       setVerificationRequested(false)
       navigateToHome('/(home)')
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Verifizierung fehlgeschlagen.')
+      setVerificationError(error instanceof Error ? error.message : 'Verifizierung fehlgeschlagen.')
     }
   }
 
   const handleResendCode = async () => {
-    setErrorMessage('')
+    setVerificationError('')
 
     try {
       const { error } = await signUp.verifications.sendEmailCode()
       if (error) {
-        setErrorMessage(error.message)
+        setVerificationError(error.message)
         return
       }
 
       setCode('')
-      setVerificationRequested(true)
-      setErrorMessage('Neuer Code wurde gesendet.')
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Code konnte nicht erneut gesendet werden.')
+      setVerificationError(error instanceof Error ? error.message : 'Code konnte nicht erneut gesendet werden.')
     }
   }
 
@@ -174,7 +183,7 @@ function SignUpContent() {
                     autoCapitalize="none"
                   />
 
-                  {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
+                  {verificationError ? <Text style={styles.error}>{verificationError}</Text> : null}
 
                   <Pressable
                     style={({ pressed }) => [
@@ -269,14 +278,7 @@ function SignUpContent() {
                   <Text style={styles.checkboxLabel}>Ich akzeptiere die Nutzungsbedingungen.</Text>
                 </Pressable>
 
-                {errors.fields.emailAddress ? (
-                  <Text style={styles.error}>{errors.fields.emailAddress.message}</Text>
-                ) : null}
-                {errors.fields.username ? <Text style={styles.error}>{errors.fields.username.message}</Text> : null}
-                {errors.fields.password ? <Text style={styles.error}>{errors.fields.password.message}</Text> : null}
-                {errors.fields.legalAccepted ? <Text style={styles.error}>{errors.fields.legalAccepted.message}</Text> : null}
-
-                {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
+                {registrationError ? <Text style={styles.error}>{registrationError}</Text> : null}
 
                 <Pressable
                   style={({ pressed }) => [

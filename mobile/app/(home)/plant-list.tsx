@@ -1,5 +1,6 @@
 import { Colors } from '@/constants/colors'
 import { api } from '../../../convex/_generated/api'
+import BurgerMenu from '../../components/burger-menu'
 import { useQuery } from 'convex/react'
 import { useRouter } from 'expo-router'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
@@ -23,10 +24,6 @@ export default function PlantListScreen() {
     router.push('/(home)/add-plant')
   }
 
-  const handleOpenGlobalSettings = () => {
-    router.push('/(home)/global-settings')
-  }
-
   const handleOpenPlant = (plantId: string) => {
     router.push({
       pathname: '/(home)/status',
@@ -38,23 +35,13 @@ export default function PlantListScreen() {
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent}>
         <View style={styles.container}>
+          <BurgerMenu />
+
           <View style={styles.headerRow}>
             <View style={styles.headerText}>
               <Text style={styles.eyebrow}>Planty</Text>
               <Text style={styles.title}>Meine Pflanzen</Text>
             </View>
-
-            <Pressable accessibilityRole="button" onPress={handleAddPlant} style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}>
-              <Text style={styles.addButtonText}>+</Text>
-            </Pressable>
-
-            <Pressable
-              accessibilityRole="button"
-              onPress={handleOpenGlobalSettings}
-              style={({ pressed }) => [styles.settingsButton, pressed && styles.addButtonPressed]}
-            >
-              <Text style={styles.settingsButtonText}>⚙️</Text>
-            </Pressable>
           </View>
 
           <View style={styles.list}>
@@ -93,17 +80,20 @@ export default function PlantListScreen() {
             ) : (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyStateTitle}>Noch keine Pflanzen</Text>
-                <Text style={styles.emptyStateText}>Lege deine erste Pflanze an oder verbinde einen Sensor später.</Text>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={handleAddPlant}
-                  style={({ pressed }) => [styles.emptyAction, pressed && styles.emptyActionPressed]}
-                >
-                  <Text style={styles.emptyActionText}>Pflanze hinzufügen</Text>
-                </Pressable>
+                <Text style={styles.emptyStateText}>
+                  Lege deine erste Pflanze an oder verbinde einen Sensor später.
+                </Text>
               </View>
             )}
           </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={handleAddPlant}
+            style={({ pressed }) => [styles.addPlantButton, pressed && styles.addPlantButtonPressed]}
+          >
+            <Text style={styles.addPlantButtonText}>+ Pflanze hinzufügen</Text>
+          </Pressable>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -222,42 +212,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 36,
   },
-  addButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-  },
-  addButtonPressed: {
-    opacity: 0.82,
-  },
-  addButtonText: {
-    color: colors.text,
-    fontSize: 24,
-    fontWeight: '700',
-    lineHeight: 24,
-    marginTop: -1,
-  },
-  settingsButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-  },
-  settingsButtonText: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '700',
-    lineHeight: 18,
-  },
   list: {
     gap: 12,
   },
@@ -353,19 +307,23 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     textAlign: 'center',
   },
-  emptyAction: {
-    marginTop: 6,
-    backgroundColor: colors.accent,
-    borderRadius: 16,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
+  addPlantButton: {
+    width: '100%',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: 'transparent',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    marginTop: 4,
   },
-  emptyActionPressed: {
-    opacity: 0.88,
+  addPlantButtonPressed: {
+    opacity: 0.84,
   },
-  emptyActionText: {
-    color: colors.accentText,
-    fontSize: 15,
+  addPlantButtonText: {
+    color: colors.text,
+    fontSize: 16,
     fontWeight: '700',
   },
 })

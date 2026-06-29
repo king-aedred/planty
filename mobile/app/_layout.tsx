@@ -3,6 +3,7 @@ import { ConvexProviderWithClerk } from 'convex/react-clerk'
 import { ClerkProvider } from '@clerk/expo'
 import { tokenCache } from '@clerk/expo/token-cache'
 import { Stack } from 'expo-router'
+import { ActivityIndicator, StyleSheet, View } from 'react-native'
 import type { ReactNode } from 'react'
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY
@@ -22,11 +23,29 @@ const convex = new ConvexReactClient(convexUrl)
 export default function RootLayout() {
   return (
     <ClerkProvider publishableKey={clerkPublishableKey} tokenCache={tokenCache}>
-      <ConvexWithClerk>
-        <Stack screenOptions={{ headerShown: false }} />
-      </ConvexWithClerk>
+      <ClerkLoadingGate>
+        <ConvexWithClerk>
+          <Stack screenOptions={{ animation: 'slide_from_right', headerShown: false }} />
+        </ConvexWithClerk>
+      </ClerkLoadingGate>
     </ClerkProvider>
   )
+}
+
+function ClerkLoadingGate({ children }: { children: ReactNode }) {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { useAuth } = require('@clerk/expo') as typeof import('@clerk/expo')
+  const { isLoaded } = useAuth()
+
+  if (!isLoaded) {
+    return (
+      <View style={styles.loadingScreen}>
+        <ActivityIndicator size="large" color="#7FD38A" />
+      </View>
+    )
+  }
+
+  return children
 }
 
 function ConvexWithClerk({ children }: { children: ReactNode }) {
@@ -40,3 +59,12 @@ function ConvexWithClerk({ children }: { children: ReactNode }) {
     </ConvexProviderWithClerk>
   )
 }
+
+const styles = StyleSheet.create({
+  loadingScreen: {
+    flex: 1,
+    backgroundColor: '#07130F',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+})
