@@ -205,7 +205,6 @@ function SignInContent() {
                 {errors.fields.password ? <Text style={styles.error}>{errors.fields.password.message}</Text> : null}
 
                 {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
-                <Text style={styles.debug}>{`Clerk: ${signIn.status ?? 'unknown'}`}</Text>
 
                 {verificationStrategy ? (
                   <>
@@ -367,11 +366,6 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: 12,
     marginTop: -6,
-  },
-  debug: {
-    color: colors.muted,
-    fontSize: 11,
-    marginTop: -2,
   },
   linkButton: {
     alignItems: 'center',

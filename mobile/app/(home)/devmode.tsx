@@ -227,7 +227,7 @@ export default function DevModeScreen() {
               }
             : {
                 label: 'dev/info',
-                url: `${BASE_URL}/dev/info`,
+                url: `${serverBaseUrl ?? SERVER_CANDIDATES[0]}/dev/info`,
                 method: 'GET',
                 errorName,
                 errorMessage,
@@ -312,7 +312,7 @@ export default function DevModeScreen() {
             }
           : {
               label: 'dev/simulate',
-              url: `${BASE_URL}/dev/simulate`,
+              url: `${serverBaseUrl ?? SERVER_CANDIDATES[0]}/dev/simulate`,
               method: 'POST',
               errorName,
               errorMessage,
@@ -387,7 +387,7 @@ export default function DevModeScreen() {
             }
           : {
               label: 'dev/trigger-cron',
-              url: `${BASE_URL}/dev/trigger-cron`,
+              url: `${serverBaseUrl ?? SERVER_CANDIDATES[0]}/dev/trigger-cron`,
               method: 'POST',
               errorName,
               errorMessage,

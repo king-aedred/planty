@@ -72,11 +72,10 @@ export const getLatestSummary = query({
     device_id: v.string(),
   },
   handler: async (ctx, args) => {
-    const summaries = await ctx.db
+    return await ctx.db
       .query("daily_summaries")
-      .filter((q) => q.eq(q.field("sensor_id"), args.device_id))
-      .collect();
-
-    return summaries.slice().sort((left, right) => right.created_at - left.created_at)[0] ?? null;
+      .withIndex("by_sensor_and_date", (q) => q.eq("sensor_id", args.device_id))
+      .order("desc")
+      .first();
   },
 });
