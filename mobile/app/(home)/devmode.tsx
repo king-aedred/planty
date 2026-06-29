@@ -75,7 +75,8 @@ type SensorPlant = {
 
 export default function DevModeScreen() {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { useUser } = require('@clerk/expo') as typeof import('@clerk/expo')
+  const { useAuth, useUser } = require('@clerk/expo') as typeof import('@clerk/expo')
+  const { getToken } = useAuth()
   const { user } = useUser()
   const router = useRouter()
 
@@ -96,6 +97,18 @@ export default function DevModeScreen() {
   const [requestDebug, setRequestDebug] = useState<RequestDebug | null>(null)
   const [multiResults, setMultiResults] = useState<SensorResult[]>([])
   const [isSingleDropdownOpen, setIsSingleDropdownOpen] = useState(false)
+
+  const getAuthorizationHeaders = async (): Promise<Record<string, string>> => {
+    const token = await getToken({ template: 'convex' })
+
+    if (!token) {
+      throw new Error('Kein Clerk Session Token verfügbar')
+    }
+
+    return {
+      Authorization: `Bearer ${token}`,
+    }
+  }
 
   const deviceId = useMemo(() => {
     const firstPlant = plants?.[0]
@@ -256,11 +269,10 @@ export default function DevModeScreen() {
 
         const controller = new AbortController()
         const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+        const authorizationHeaders = await getAuthorizationHeaders()
 
         const response = await fetch(url, {
-          headers: {
-            'x-clerk-id': clerkId,
-          },
+          headers: authorizationHeaders,
           signal: controller.signal,
         })
 
@@ -335,12 +347,13 @@ export default function DevModeScreen() {
       const url = `${serverBaseUrl}/dev/simulate`
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+      const authorizationHeaders = await getAuthorizationHeaders()
 
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-clerk-id': clerkId,
+          ...authorizationHeaders,
         },
         signal: controller.signal,
         body: JSON.stringify({
@@ -420,12 +433,13 @@ export default function DevModeScreen() {
     try {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+      const authorizationHeaders = await getAuthorizationHeaders()
 
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-clerk-id': clerkId,
+          ...authorizationHeaders,
         },
         signal: controller.signal,
         body: JSON.stringify({
@@ -536,11 +550,12 @@ export default function DevModeScreen() {
       const url = `${serverBaseUrl}/dev/trigger-cron`
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+      const authorizationHeaders = await getAuthorizationHeaders()
 
       const response = await fetch(url, {
         method: 'POST',
         headers: {
-          'x-clerk-id': clerkId,
+          ...authorizationHeaders,
         },
         signal: controller.signal,
       })

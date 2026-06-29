@@ -1,9 +1,54 @@
 import { api } from '../../../convex/_generated/api'
 import { Redirect } from 'expo-router'
 import { useMutation, useQuery } from 'convex/react'
-import { useEffect, useRef } from 'react'
+import { useRouter } from 'expo-router'
+import React, { useEffect, useRef } from 'react'
+
+class UnauthorizedRetryBoundary extends React.Component<
+  {
+    children: React.ReactNode
+    onUnauthorizedRetry: () => void
+  },
+  {
+    hasError: boolean
+  }
+> {
+  state = {
+    hasError: false,
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+
+  componentDidCatch(error: unknown) {
+    if (error instanceof Error && error.message.includes('Unauthorized')) {
+      setTimeout(() => {
+        this.props.onUnauthorizedRetry()
+      }, 2000)
+    }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return null
+    }
+
+    return this.props.children
+  }
+}
 
 export default function Page() {
+  const router = useRouter()
+
+  return (
+    <UnauthorizedRetryBoundary onUnauthorizedRetry={() => router.replace('/')}>
+      <HomeContent />
+    </UnauthorizedRetryBoundary>
+  )
+}
+
+function HomeContent() {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { useUser } = require('@clerk/expo') as typeof import('@clerk/expo')
   const { user, isLoaded, isSignedIn } = useUser()

@@ -1,11 +1,14 @@
 import { Hono } from 'hono'
 import { convex } from '../lib/convex.js'
+import { createConvexClient } from '../lib/convex.js'
 import { processSessionIfReady } from '../lib/processor.js'
 import { CRON_INTERVAL_MINUTES, MIN_READINGS_REQUIRED } from '../config.js'
+import { clerkAuthMiddleware } from '../lib/auth.js'
 
 const convexApiPromise = import('../../../convex/_generated/api.js')
 
 const devModeRouter = new Hono()
+devModeRouter.use('*', clerkAuthMiddleware)
 
 type Scenario =
   | 'normal'
@@ -104,25 +107,21 @@ const buildScenarioReadings = (sensorId: string, scenario: Scenario, date: strin
   )
 }
 
-const requireDevUser = async (clerkId: string | null): Promise<boolean> => {
+const requireDevUser = async (clerkId: string | undefined, authToken: string): Promise<boolean> => {
   if (!clerkId) {
     return false
   }
 
   const { api } = await convexApiPromise
+  const authenticatedConvex = createConvexClient(authToken)
 
-  return await convex.query(api.users.isDevUser, { clerk_id: clerkId })
-}
-
-const parseAuthorizationHeader = (request: Request): string | null => {
-  const clerkId = request.headers.get('x-clerk-id')?.trim() ?? ''
-
-  return clerkId.length > 0 ? clerkId : null
+  return await authenticatedConvex.query(api.users.isDevUser, { clerk_id: clerkId })
 }
 
 devModeRouter.get('/info', async (c) => {
-  const clerkId = parseAuthorizationHeader(c.req.raw)
-  const isDevUser = await requireDevUser(clerkId)
+  const clerkId = c.get('clerkId')
+  const clerkToken = c.get('clerkToken')
+  const isDevUser = await requireDevUser(clerkId, clerkToken)
 
   console.log('[dev/info]', { clerkId, isDevUser })
 
@@ -137,8 +136,9 @@ devModeRouter.get('/info', async (c) => {
 })
 
 devModeRouter.post('/simulate', async (c) => {
-  const clerkId = c.req.header('x-clerk-id')?.trim() ?? null
-  const isDevUser = await requireDevUser(clerkId)
+  const clerkId = c.get('clerkId')
+  const clerkToken = c.get('clerkToken')
+  const isDevUser = await requireDevUser(clerkId, clerkToken)
 
   console.log('[dev/simulate]', { clerkId, isDevUser })
 
@@ -221,8 +221,9 @@ devModeRouter.post('/simulate', async (c) => {
 })
 
 devModeRouter.post('/trigger-cron', async (c) => {
-  const clerkId = parseAuthorizationHeader(c.req.raw)
-  const isDevUser = await requireDevUser(clerkId)
+  const clerkId = c.get('clerkId')
+  const clerkToken = c.get('clerkToken')
+  const isDevUser = await requireDevUser(clerkId, clerkToken)
 
   console.log('[dev/trigger-cron]', { clerkId, isDevUser })
 

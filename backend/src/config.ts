@@ -80,9 +80,15 @@ export const MIN_READINGS_REQUIRED = parseNumberEnv(nodeProcess?.env.MIN_READING
 export const CRON_SCHEDULE_ENABLED = parseBooleanEnv(nodeProcess?.env.CRON_SCHEDULE_ENABLED, true)
 
 const convexUrl = nodeProcess?.env.CONVEX_URL
+const clerkSecretKey = nodeProcess?.env.CLERK_SECRET_KEY
 
 if (!convexUrl) {
     throw new Error('CONVEX_URL is missing')
 }
 
+if (!clerkSecretKey) {
+    throw new Error('CLERK_SECRET_KEY is missing')
+}
+
 export const CONVEX_URL: string = convexUrl
+export const CLERK_SECRET_KEY: string = clerkSecretKey

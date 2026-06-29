@@ -1,6 +1,10 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
+// Backend-only reads: the Hono server verifies the Clerk token before calling these queries.
+// They intentionally remain unauthenticated because backend ConvexHttpClient calls do not
+// automatically carry a user identity, but the backend route itself is protected.
+
 export const getReadingsBySensorAndDate = query({
   args: {
     sensor_id: v.string(),

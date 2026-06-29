@@ -1,4 +1,5 @@
 import cron from 'node-cron'
+import type { ScheduledTask } from 'node-cron'
 import { CRON_INTERVAL_MINUTES } from '../config.js'
 import { convex } from '../lib/convex.js'
 import { processSessionIfReady } from '../lib/processor.js'
@@ -33,7 +34,7 @@ export const runCronJobOnce = async (): Promise<Array<{ sensor_id: string; resul
     return results
 }
 
-export const startCronJob = (): cron.ScheduledTask => {
+export const startCronJob = (): ScheduledTask => {
     const expression = `*/${CRON_INTERVAL_MINUTES} * * * *`
 
     return cron.schedule(expression, async () => {

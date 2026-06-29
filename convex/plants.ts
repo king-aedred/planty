@@ -7,7 +7,17 @@ type PlantWithLatestSummary = Doc<"plants"> & {
   latestSummary: Doc<"daily_summaries"> | null;
 };
 
+const requireSelf = async (ctx: QueryCtx | MutationCtx, clerkId: string) => {
+  const identity = await ctx.auth.getUserIdentity();
+
+  if (!identity || identity.subject !== clerkId) {
+    throw new Error("Unauthorized");
+  }
+};
+
 async function getPlantsWithLatestSummaries(ctx: QueryCtx, clerkId: string): Promise<PlantWithLatestSummary[]> {
+  await requireSelf(ctx, clerkId);
+
   const plants = (await ctx.db.query("plants").collect()) as Doc<"plants">[];
   const summaries = (await ctx.db.query("daily_summaries").collect()) as Doc<"daily_summaries">[];
 
@@ -56,9 +66,15 @@ export const getPlantByDeviceId = query({
     device_id: v.string(),
   },
   handler: async (ctx, args) => {
-    const plants = (await ctx.db.query("plants").collect()) as Doc<"plants">[];
+    const identity = await ctx.auth.getUserIdentity();
+    const plant = (await ctx.db.query("plants").collect()) as Doc<"plants">[];
+    const matchedPlant = plant.find((entry) => entry.device_id === args.device_id || entry.sensor_id === args.device_id) ?? null;
 
-    return plants.find((plant) => plant.device_id === args.device_id || plant.sensor_id === args.device_id) ?? null;
+    if (!identity || !matchedPlant || matchedPlant.clerk_id !== identity.subject) {
+      return null;
+    }
+
+    return matchedPlant;
   },
 });
 
@@ -69,6 +85,8 @@ export const createPlant = mutation({
     name: v.string(),
   },
   handler: async (ctx: MutationCtx, args) => {
+    await requireSelf(ctx, args.clerk_id);
+
     if (args.device_id) {
       const plants = (await ctx.db.query("plants").collect()) as Doc<"plants">[];
       const duplicatePlant = plants.find(
@@ -105,6 +123,8 @@ export const removeSensorFromPlant = mutation({
       return null;
     }
 
+    await requireSelf(ctx, plant.clerk_id ?? "");
+
     await ctx.db.patch(args.plant_id, {
       device_id: undefined,
       sensor_id: undefined,
@@ -125,6 +145,8 @@ export const deletePlant = mutation({
       return null;
     }
 
+    await requireSelf(ctx, plant.clerk_id ?? "");
+
     await ctx.db.delete(args.plant_id);
 
     return args.plant_id;
@@ -144,6 +166,9 @@ export const transferSensor = mutation({
     if (!fromPlant || !toPlant) {
       return null;
     }
+
+    await requireSelf(ctx, fromPlant.clerk_id ?? "");
+    await requireSelf(ctx, toPlant.clerk_id ?? "");
 
     await ctx.db.patch(args.from_plant_id, {
       device_id: undefined,
@@ -168,6 +193,19 @@ export const getLatestSummary = query({
     device_id: v.string(),
   },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+
+    if (!identity) {
+      return null;
+    }
+
+    const plants = (await ctx.db.query("plants").collect()) as Doc<"plants">[];
+    const ownedPlant = plants.find((entry) => entry.device_id === args.device_id || entry.sensor_id === args.device_id);
+
+    if (!ownedPlant || ownedPlant.clerk_id !== identity.subject) {
+      return null;
+    }
+
     const summaries = (await ctx.db.query("daily_summaries").collect()) as Doc<"daily_summaries">[];
 
     return (

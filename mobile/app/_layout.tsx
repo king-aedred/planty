@@ -1,5 +1,9 @@
-import { ConvexProvider, ConvexReactClient } from 'convex/react'
+import { ConvexReactClient } from 'convex/react'
+import { ConvexProviderWithClerk } from 'convex/react-clerk'
+import { ClerkProvider } from '@clerk/expo'
+import { tokenCache } from '@clerk/expo/token-cache'
 import { Stack } from 'expo-router'
+import type { ReactNode } from 'react'
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY
 const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL
@@ -16,16 +20,23 @@ const clerkPublishableKey = publishableKey
 const convex = new ConvexReactClient(convexUrl)
 
 export default function RootLayout() {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { ClerkProvider } = require('@clerk/expo') as typeof import('@clerk/expo')
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { tokenCache } = require('@clerk/expo/token-cache') as typeof import('@clerk/expo/token-cache')
-
   return (
     <ClerkProvider publishableKey={clerkPublishableKey} tokenCache={tokenCache}>
-      <ConvexProvider client={convex}>
+      <ConvexWithClerk>
         <Stack screenOptions={{ headerShown: false }} />
-      </ConvexProvider>
+      </ConvexWithClerk>
     </ClerkProvider>
+  )
+}
+
+function ConvexWithClerk({ children }: { children: ReactNode }) {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { useAuth, useSession } = require('@clerk/expo') as typeof import('@clerk/expo')
+  const { session } = useSession()
+
+  return (
+    <ConvexProviderWithClerk key={session?.id ?? 'signed-out'} client={convex} useAuth={useAuth}>
+      {children}
+    </ConvexProviderWithClerk>
   )
 }
