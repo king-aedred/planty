@@ -1,7 +1,7 @@
 import { Colors } from '@/constants/colors'
 import { api } from '../../convex/_generated/api'
 import { useQuery } from 'convex/react'
-import { useRouter } from 'expo-router'
+import { usePathname, useRouter, useSegments } from 'expo-router'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Animated,
@@ -19,14 +19,17 @@ const PANEL_WIDTH = SCREEN_WIDTH * 0.7
 
 type BurgerMenuProps = {
   deviceId?: string
+  onboardingMode?: boolean
 }
 
-export default function BurgerMenu({ deviceId }: BurgerMenuProps) {
+export default function BurgerMenu({ deviceId, onboardingMode }: BurgerMenuProps) {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { useAuth, useUser } = require('@clerk/expo') as typeof import('@clerk/expo')
   const { user } = useUser()
   const { signOut } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
+  const segments = useSegments()
   const slideValue = useRef(new Animated.Value(0)).current
   const [isOpen, setIsOpen] = useState(false)
 
@@ -34,6 +37,8 @@ export default function BurgerMenu({ deviceId }: BurgerMenuProps) {
   const isDevUser = useQuery(api.users.isDevUser, clerkId ? { clerk_id: clerkId } : 'skip')
 
   const resolvedDeviceId = useMemo(() => deviceId ?? '', [deviceId])
+  const isOnboardingRoute = segments.includes('onboarding') || pathname.endsWith('/onboarding')
+  const isOnboardingMode = onboardingMode ?? isOnboardingRoute
 
   useEffect(() => {
     Animated.timing(slideValue, {
@@ -55,11 +60,6 @@ export default function BurgerMenu({ deviceId }: BurgerMenuProps) {
     inputRange: [0, 1],
     outputRange: [0, 1],
   })
-
-  const navigateToStatus = () => {
-    closeMenu()
-    router.push('/(home)/status')
-  }
 
   const navigateToPlantList = () => {
     closeMenu()
@@ -102,19 +102,19 @@ export default function BurgerMenu({ deviceId }: BurgerMenuProps) {
         <View style={styles.panelContent}>
           <Text style={styles.panelTitle}>Menü</Text>
 
-          <Pressable style={styles.menuItem} onPress={navigateToStatus}>
-            <Text style={styles.menuItemText}>Status</Text>
+          {isOnboardingMode ? null : (
+            <>
+              <Pressable style={styles.menuItem} onPress={navigateToPlantList}>
+                <Text style={styles.menuItemText}>Meine Pflanzen</Text>
+              </Pressable>
+            </>
+          )}
+
+          <Pressable style={styles.menuItem} onPress={navigateToGlobalSettings}>
+            <Text style={styles.menuItemText}>⚙️ Einstellungen</Text>
           </Pressable>
 
-          <Pressable style={styles.menuItem} onPress={navigateToPlantList}>
-            <Text style={styles.menuItemText}>Meine Pflanzen</Text>
-          </Pressable>
-
-                  <Pressable style={styles.menuItem} onPress={navigateToGlobalSettings}>
-                    <Text style={styles.menuItemText}>⚙️ Einstellungen</Text>
-                  </Pressable>
-
-          {isDevUser ? (
+          {!isOnboardingMode && isDevUser ? (
             <Pressable style={styles.menuItem} onPress={navigateToDevTools}>
               <Text style={styles.menuItemText}>Dev Tools</Text>
             </Pressable>
