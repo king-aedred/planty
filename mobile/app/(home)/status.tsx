@@ -51,6 +51,17 @@ export default function StatusScreen() {
     router.replace('/(auth)/sign-in')
   }
 
+  const handleOpenPlantSettings = () => {
+    if (!resolvedPlant.plantId) {
+      return
+    }
+
+    router.push({
+      pathname: '/(home)/plant-settings',
+      params: { plant_id: resolvedPlant.plantId },
+    })
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -64,9 +75,20 @@ export default function StatusScreen() {
                 <Text style={styles.deviceId}>{resolvedPlant.deviceId || 'Kein Sensor verbunden'}</Text>
               </View>
 
-              <Pressable style={({ pressed }) => [styles.logoutButton, pressed && styles.logoutButtonPressed]} onPress={handleLogout}>
-                <Text style={styles.logoutButtonText}>Logout</Text>
-              </Pressable>
+              <View style={styles.headerActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  style={({ pressed }) => [styles.settingsButton, pressed && styles.settingsButtonPressed]}
+                  onPress={handleOpenPlantSettings}
+                  disabled={!resolvedPlant.plantId}
+                >
+                  <Text style={styles.settingsButtonText}>⚙️ Pflanzen-Einstellungen</Text>
+                </Pressable>
+
+                <Pressable style={({ pressed }) => [styles.logoutButton, pressed && styles.logoutButtonPressed]} onPress={handleLogout}>
+                  <Text style={styles.logoutButtonText}>Logout</Text>
+                </Pressable>
+              </View>
             </View>
 
             {resolvedPlant.deviceId ? (
@@ -228,6 +250,10 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingTop: 8,
   },
+  headerActions: {
+    alignItems: 'flex-end',
+    gap: 10,
+  },
   header: {
     gap: 8,
     flex: 1,
@@ -261,6 +287,22 @@ const styles = StyleSheet.create({
   },
   logoutButtonPressed: {
     opacity: 0.8,
+  },
+  settingsButton: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  settingsButtonPressed: {
+    opacity: 0.84,
+  },
+  settingsButtonText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '800',
   },
   logoutButtonText: {
     color: colors.text,

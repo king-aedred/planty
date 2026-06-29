@@ -23,6 +23,10 @@ export default function PlantListScreen() {
     router.push('/(home)/add-plant')
   }
 
+  const handleOpenGlobalSettings = () => {
+    router.push('/(home)/global-settings')
+  }
+
   const handleOpenPlant = (plantId: string) => {
     router.push({
       pathname: '/(home)/status',
@@ -42,6 +46,14 @@ export default function PlantListScreen() {
 
             <Pressable accessibilityRole="button" onPress={handleAddPlant} style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}>
               <Text style={styles.addButtonText}>+</Text>
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={handleOpenGlobalSettings}
+              style={({ pressed }) => [styles.settingsButton, pressed && styles.addButtonPressed]}
+            >
+              <Text style={styles.settingsButtonText}>⚙️</Text>
             </Pressable>
           </View>
 
@@ -229,6 +241,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 24,
     marginTop: -1,
+  },
+  settingsButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+  },
+  settingsButtonText: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '700',
+    lineHeight: 18,
   },
   list: {
     gap: 12,

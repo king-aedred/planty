@@ -112,6 +112,40 @@ export const createPlant = mutation({
   },
 });
 
+export const updatePlantSettings = mutation({
+  args: {
+    plant_id: v.id("plants"),
+    settings: v.object({
+      name: v.string(),
+      moisture_threshold: v.optional(v.number()),
+      temperature_threshold_min: v.optional(v.number()),
+      temperature_threshold_max: v.optional(v.number()),
+      light_threshold_min: v.optional(v.number()),
+      light_threshold_max: v.optional(v.number()),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const plant = await ctx.db.get(args.plant_id);
+
+    if (!plant) {
+      return null;
+    }
+
+    await requireSelf(ctx, plant.clerk_id ?? "");
+
+    await ctx.db.patch(args.plant_id, {
+      name: args.settings.name,
+      moisture_threshold: args.settings.moisture_threshold,
+      temperature_threshold_min: args.settings.temperature_threshold_min,
+      temperature_threshold_max: args.settings.temperature_threshold_max,
+      light_threshold_min: args.settings.light_threshold_min,
+      light_threshold_max: args.settings.light_threshold_max,
+    });
+
+    return args.plant_id;
+  },
+});
+
 export const removeSensorFromPlant = mutation({
   args: {
     plant_id: v.id("plants"),

@@ -44,6 +44,47 @@ export const createUser = mutation({
   },
 });
 
+export const updateUserSettings = mutation({
+  args: {
+    clerk_id: v.string(),
+    settings: v.object({
+      notification_push: v.optional(v.boolean()),
+      notification_telegram: v.optional(v.boolean()),
+      notification_planty_messenger: v.optional(v.boolean()),
+      notification_call: v.optional(v.boolean()),
+      contact_window_start: v.optional(v.number()),
+      contact_window_end: v.optional(v.number()),
+      measure_time: v.optional(v.string()),
+      phone_number: v.optional(v.string()),
+    }),
+  },
+  handler: async (ctx, args) => {
+    await requireSelf(ctx, args.clerk_id);
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerk_id", args.clerk_id))
+      .first();
+
+    if (!user) {
+      return null;
+    }
+
+    await ctx.db.patch(user._id, {
+      notification_push: args.settings.notification_push,
+      notification_telegram: args.settings.notification_telegram,
+      notification_planty_messenger: args.settings.notification_planty_messenger,
+      notification_call: args.settings.notification_call,
+      contact_window_start: args.settings.contact_window_start,
+      contact_window_end: args.settings.contact_window_end,
+      measure_time: args.settings.measure_time,
+      phone_number: args.settings.phone_number,
+    });
+
+    return user._id;
+  },
+});
+
 export const isDevUser = query({
   args: {
     clerk_id: v.string(),

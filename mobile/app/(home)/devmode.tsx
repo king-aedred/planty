@@ -20,6 +20,13 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 const colors = Colors.dark
 const REQUEST_TIMEOUT_MS = 8000
 
+type SensorResult = {
+  sensor_id: string
+  scenario: string
+  success: boolean
+  message: string
+}
+
 const SERVER_CANDIDATES = [
   process.env.EXPO_PUBLIC_DEV_SERVER_URL?.trim(),
   Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000',

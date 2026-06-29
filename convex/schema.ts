@@ -7,6 +7,14 @@ export default defineSchema({
     email: v.string(),
     plan: v.string(),
     is_dev: v.boolean(),
+    notification_push: v.optional(v.boolean()),
+    notification_telegram: v.optional(v.boolean()),
+    notification_planty_messenger: v.optional(v.boolean()),
+    notification_call: v.optional(v.boolean()),
+    contact_window_start: v.optional(v.number()),
+    contact_window_end: v.optional(v.number()),
+    measure_time: v.optional(v.string()),
+    phone_number: v.optional(v.string()),
     created_at: v.number(),
   }).index("by_clerk_id", ["clerk_id"]),
 
@@ -32,6 +40,11 @@ export default defineSchema({
     sensor_id: v.optional(v.string()),
     clerk_id: v.optional(v.string()),
     name: v.string(),
+    moisture_threshold: v.optional(v.number()),
+    temperature_threshold_min: v.optional(v.number()),
+    temperature_threshold_max: v.optional(v.number()),
+    light_threshold_min: v.optional(v.number()),
+    light_threshold_max: v.optional(v.number()),
     created_at: v.number(),
   })
     .index("by_clerk_id", ["clerk_id"])

@@ -7,6 +7,8 @@ export default function Layout() {
       <Stack.Screen name="onboarding" />
       <Stack.Screen name="plant-list" />
       <Stack.Screen name="add-plant" />
+      <Stack.Screen name="global-settings" />
+      <Stack.Screen name="plant-settings" />
       <Stack.Screen name="status" options={{ gestureEnabled: false }} />
       <Stack.Screen name="devmode" />
     </Stack>
