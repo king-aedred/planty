@@ -29,7 +29,7 @@ export default function BurgerMenu({ deviceId, onboardingMode }: BurgerMenuProps
   const { signOut } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
-  const segments = useSegments()
+  const segments = useSegments() as string[]
   const slideValue = useRef(new Animated.Value(0)).current
   const [isOpen, setIsOpen] = useState(false)
 
@@ -111,7 +111,7 @@ export default function BurgerMenu({ deviceId, onboardingMode }: BurgerMenuProps
           )}
 
           <Pressable style={styles.menuItem} onPress={navigateToGlobalSettings}>
-            <Text style={styles.menuItemText}>⚙️ Einstellungen</Text>
+            <Text style={styles.menuItemText}>Einstellungen</Text>
           </Pressable>
 
           {!isOnboardingMode && isDevUser ? (

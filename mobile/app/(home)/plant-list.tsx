@@ -32,7 +32,7 @@ export default function PlantListScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['top']} style={styles.safeArea}>
       <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent}>
         <View style={styles.container}>
           <BurgerMenu />

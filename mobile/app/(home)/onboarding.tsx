@@ -63,7 +63,7 @@ export default function OnboardingScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['top']} style={styles.safeArea}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
           <ScrollView
@@ -72,7 +72,7 @@ export default function OnboardingScreen() {
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.container}>
-              <BurgerMenu />
+              <BurgerMenu onboardingMode={true} />
               <View style={styles.hero}>
                 <Text style={styles.eyebrow}>Planty</Text>
                 <Text style={styles.title}>Deine erste Pflanze 🌱</Text>

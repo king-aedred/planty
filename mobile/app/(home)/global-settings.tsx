@@ -2,7 +2,7 @@ import { Colors } from '@/constants/colors'
 import { api } from '../../../convex/_generated/api'
 import { useMutation, useQuery } from 'convex/react'
 import { useRouter } from 'expo-router'
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Alert,
   Keyboard,
@@ -20,13 +20,10 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 const colors = Colors.dark
 
-const hourOptions = Array.from({ length: 24 }, (_, index) => String(index))
-
 export default function GlobalSettingsScreen() {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { useAuth, useUser } = require('@clerk/expo') as typeof import('@clerk/expo')
+  const { useUser } = require('@clerk/expo') as typeof import('@clerk/expo')
   const { user } = useUser()
-  const { signOut } = useAuth()
   const router = useRouter()
 
   const clerkId = user?.id ?? ''
@@ -38,76 +35,153 @@ export default function GlobalSettingsScreen() {
   const [notificationTelegram, setNotificationTelegram] = useState(false)
   const [notificationPlantyMessenger, setNotificationPlantyMessenger] = useState(false)
   const [notificationCall, setNotificationCall] = useState(false)
-  const [contactWindowStart, setContactWindowStart] = useState('8')
-  const [contactWindowEnd, setContactWindowEnd] = useState('20')
+  const [contactWindowStart, setContactWindowStart] = useState('9')
+  const [contactWindowEnd, setContactWindowEnd] = useState('21')
   const [phoneNumber, setPhoneNumber] = useState('')
-  const [isSaving, setIsSaving] = useState(false)
+  const [username, setUsername] = useState('')
+  const [usernameMessage, setUsernameMessage] = useState('')
+  const [usernameMessageKind, setUsernameMessageKind] = useState<'success' | 'error' | ''>('')
+  const [timeError, setTimeError] = useState('')
+  const [isSavingSettings, setIsSavingSettings] = useState(false)
+  const [isSavingUsername, setIsSavingUsername] = useState(false)
 
-  const email = currentUser?.email ?? user?.primaryEmailAddress?.emailAddress ?? ''
+  const email = user?.primaryEmailAddress?.emailAddress ?? ''
 
-  const resolvedSettings = useMemo(() => {
-    return {
-      measureTime,
-      notificationPush,
-      notificationTelegram,
-      notificationPlantyMessenger,
-      notificationCall,
-      contactWindowStart,
-      contactWindowEnd,
-      phoneNumber,
+  useEffect(() => {
+    setUsername(user?.username ?? '')
+  }, [user?.username])
+
+  useEffect(() => {
+    if (!currentUser) {
+      return
     }
-  }, [
-    contactWindowEnd,
-    contactWindowStart,
-    measureTime,
-    notificationCall,
-    notificationPlantyMessenger,
-    notificationPush,
-    notificationTelegram,
-    phoneNumber,
-  ])
+
+    if (typeof currentUser.measure_time === 'string') {
+      setMeasureTime(currentUser.measure_time)
+    }
+
+    if (typeof currentUser.contact_window_start === 'number') {
+      setContactWindowStart(String(currentUser.contact_window_start))
+    }
+
+    if (typeof currentUser.contact_window_end === 'number') {
+      setContactWindowEnd(String(currentUser.contact_window_end))
+    }
+
+    setNotificationPush(currentUser.notification_push ?? true)
+    setNotificationTelegram(currentUser.notification_telegram ?? false)
+    setNotificationPlantyMessenger(currentUser.notification_planty_messenger ?? false)
+    setNotificationCall(currentUser.notification_call ?? false)
+    setPhoneNumber(currentUser.phone_number ?? '')
+  }, [currentUser])
 
   const goBack = () => {
     router.back()
   }
 
-  const handleLogout = async () => {
-    await signOut()
-    router.replace('/(auth)/sign-in?logout=1')
-  }
-
-  const handleSave = async () => {
-    if (!clerkId || isSaving) {
+  const handleSaveSettings = async () => {
+    if (!clerkId || isSavingSettings) {
       return
     }
 
-    setIsSaving(true)
+    setTimeError('')
+
+    const measureTimeValue = normalizeTimeInput(measureTime)
+    if (!measureTimeValue) {
+      setTimeError('Messzeit muss im Format HH:MM angegeben werden.')
+      return
+    }
+
+    const contactStartValue = normalizeHourInput(contactWindowStart)
+    if (contactWindowStart.trim() && contactStartValue === null) {
+      setTimeError('Von muss eine Zahl zwischen 0 und 23 sein.')
+      return
+    }
+
+    const contactEndValue = normalizeHourInput(contactWindowEnd)
+    if (contactWindowEnd.trim() && contactEndValue === null) {
+      setTimeError('Bis muss eine Zahl zwischen 0 und 23 sein.')
+      return
+    }
+
+    setIsSavingSettings(true)
 
     try {
+      const settings: Record<string, string | number | boolean | undefined> = {
+        notification_push: notificationPush,
+        notification_telegram: notificationTelegram,
+        notification_planty_messenger: notificationPlantyMessenger,
+        notification_call: notificationCall,
+        measure_time: measureTimeValue,
+        phone_number: phoneNumber.trim() || undefined,
+      }
+
+      if (contactStartValue !== null) {
+        settings.contact_window_start = contactStartValue
+      }
+
+      if (contactEndValue !== null) {
+        settings.contact_window_end = contactEndValue
+      }
+
       await updateUserSettings({
         clerk_id: clerkId,
-        settings: {
-          notification_push: resolvedSettings.notificationPush,
-          notification_telegram: resolvedSettings.notificationTelegram,
-          notification_planty_messenger: resolvedSettings.notificationPlantyMessenger,
-          notification_call: resolvedSettings.notificationCall,
-          contact_window_start: parseHour(resolvedSettings.contactWindowStart),
-          contact_window_end: parseHour(resolvedSettings.contactWindowEnd),
-          measure_time: normalizeTime(resolvedSettings.measureTime),
-          phone_number: resolvedSettings.phoneNumber.trim() || undefined,
-        },
+        settings: settings as never,
       })
 
       Alert.alert('Gespeichert', 'Deine globalen Einstellungen wurden aktualisiert.')
     } catch (error) {
       Alert.alert('Fehler', error instanceof Error ? error.message : 'Einstellungen konnten nicht gespeichert werden')
     } finally {
-      setIsSaving(false)
+      setIsSavingSettings(false)
+    }
+  }
+
+  const handleSaveUsername = async () => {
+    if (!user || isSavingUsername) {
+      return
+    }
+
+    const nextUsername = username.trim().toLowerCase()
+
+    if (nextUsername.length < 3) {
+      setUsernameMessage('Der Username muss mindestens 3 Zeichen haben')
+      setUsernameMessageKind('error')
+      return
+    }
+
+    if (!/^[a-z0-9_]+$/.test(nextUsername)) {
+      setUsernameMessage('Nur Kleinbuchstaben, Zahlen und Unterstriche erlaubt')
+      setUsernameMessageKind('error')
+      return
+    }
+
+    setIsSavingUsername(true)
+    setUsernameMessage('')
+    setUsernameMessageKind('')
+
+    try {
+      await user.update({ username: nextUsername })
+      setUsername(nextUsername)
+      setUsernameMessage('Username gespeichert')
+      setUsernameMessageKind('success')
+    } catch (error) {
+      const clerkError = error as {
+        code?: string
+        errors?: Array<{ code?: string }>
+      }
+      const isUsernameTaken =
+        clerkError.code === 'form_identifier_exists' || clerkError.errors?.some((entry) => entry.code === 'form_identifier_exists')
+
+      setUsernameMessage(isUsernameTaken ? 'Dieser Username ist bereits vergeben' : 'Username konnte nicht gespeichert werden')
+      setUsernameMessageKind('error')
+    } finally {
+      setIsSavingUsername(false)
     }
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['top']} style={styles.safeArea}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
           <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
@@ -143,9 +217,11 @@ export default function GlobalSettingsScreen() {
                 />
 
                 <View style={styles.rowGroup}>
-                  <PickerField label="Kontaktzeit von" value={contactWindowStart} onChangeText={setContactWindowStart} options={hourOptions} />
-                  <PickerField label="Kontaktzeit bis" value={contactWindowEnd} onChangeText={setContactWindowEnd} options={hourOptions} />
+                  <Field label="Von" value={contactWindowStart} onChangeText={setContactWindowStart} placeholder="9" autoCapitalize="none" />
+                  <Field label="Bis" value={contactWindowEnd} onChangeText={setContactWindowEnd} placeholder="21" autoCapitalize="none" />
                 </View>
+
+                {timeError ? <Text style={styles.feedbackError}>{timeError}</Text> : null}
 
                 <Field label="Telefonnummer" value={phoneNumber} onChangeText={setPhoneNumber} placeholder="Optional" autoCapitalize="none" />
               </Section>
@@ -153,18 +229,42 @@ export default function GlobalSettingsScreen() {
               <Section title="Account">
                 <Field label="Email" value={email} onChangeText={() => undefined} editable={false} />
 
-                <Pressable accessibilityRole="button" onPress={() => void handleLogout()} style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}>
-                  <Text style={styles.secondaryButtonText}>Logout</Text>
+                <Field
+                  label="Username"
+                  value={username}
+                  onChangeText={(text) => {
+                    setUsername(text.toLowerCase())
+                    setUsernameMessage('')
+                    setUsernameMessageKind('')
+                  }}
+                  placeholder="dein_username"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+
+                <Text style={styles.helperText}>Nur Kleinbuchstaben, Zahlen und Unterstriche erlaubt</Text>
+
+                {usernameMessage ? (
+                  <Text style={[styles.feedbackText, usernameMessageKind === 'success' ? styles.feedbackSuccess : styles.feedbackError]}>{usernameMessage}</Text>
+                ) : null}
+
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => void handleSaveUsername()}
+                  disabled={isSavingUsername || !username.trim()}
+                  style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed, (isSavingUsername || !username.trim()) && styles.secondaryButtonDisabled]}
+                >
+                  <Text style={styles.secondaryButtonText}>{isSavingUsername ? 'Speichere…' : 'Speichern'}</Text>
                 </Pressable>
               </Section>
 
               <Pressable
                 accessibilityRole="button"
-                onPress={() => void handleSave()}
-                disabled={isSaving}
-                style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed, isSaving && styles.primaryButtonDisabled]}
+                onPress={() => void handleSaveSettings()}
+                disabled={isSavingSettings}
+                style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed, isSavingSettings && styles.primaryButtonDisabled]}
               >
-                <Text style={styles.primaryButtonText}>{isSaving ? 'Speichere…' : 'Speichern'}</Text>
+                <Text style={styles.primaryButtonText}>{isSavingSettings ? 'Speichere…' : 'Einstellungen speichern'}</Text>
               </Pressable>
             </View>
           </ScrollView>
@@ -195,31 +295,23 @@ function CheckboxRow({ label, hint, checked, onPress }: { label: string; hint?: 
   )
 }
 
-function PickerField({ label, value, onChangeText, options }: { label: string; value: string; onChangeText: (value: string) => void; options: string[] }) {
-  return (
-    <View style={styles.fieldWrapper}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pickerScroll}>
-        {options.map((option) => {
-          const selected = value === option
-
-          return (
-            <Pressable
-              key={option}
-              accessibilityRole="button"
-              onPress={() => onChangeText(option)}
-              style={({ pressed }) => [styles.hourChip, selected && styles.hourChipSelected, pressed && styles.pressed]}
-            >
-              <Text style={[styles.hourChipText, selected && styles.hourChipTextSelected]}>{option.padStart(2, '0')}</Text>
-            </Pressable>
-          )
-        })}
-      </ScrollView>
-    </View>
-  )
-}
-
-function Field({ label, value, onChangeText, placeholder = '', autoCapitalize = 'none', editable = true }: { label: string; value: string; onChangeText: (text: string) => void; placeholder?: string; autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters'; editable?: boolean }) {
+function Field({
+  label,
+  value,
+  onChangeText,
+  placeholder = '',
+  autoCapitalize = 'none',
+  editable = true,
+  autoCorrect = true,
+}: {
+  label: string
+  value: string
+  onChangeText: (text: string) => void
+  placeholder?: string
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters'
+  editable?: boolean
+  autoCorrect?: boolean
+}) {
   return (
     <View style={styles.fieldWrapper}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -230,37 +322,44 @@ function Field({ label, value, onChangeText, placeholder = '', autoCapitalize = 
         placeholderTextColor={colors.muted}
         editable={editable}
         autoCapitalize={autoCapitalize}
+        autoCorrect={autoCorrect}
         style={[styles.input, !editable && styles.inputDisabled]}
       />
     </View>
   )
 }
 
-function normalizeTime(value: string) {
-  const match = value.trim().match(/^(\d{1,2}):(\d{2})$/)
+function normalizeTimeInput(value: string) {
+  const match = value.trim().match(/^(\d{2}):(\d{2})$/)
 
   if (!match) {
-    return undefined
+    return null
   }
 
   const hour = Number(match[1])
   const minute = Number(match[2])
 
-  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-    return undefined
+  if (!Number.isInteger(hour) || hour < 0 || hour > 23 || !Number.isInteger(minute) || minute < 0 || minute > 59) {
+    return null
   }
 
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
 }
 
-function parseHour(value: string) {
-  const hour = Number(value)
+function normalizeHourInput(value: string) {
+  const trimmed = value.trim()
 
-  if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
-    return undefined
+  if (!trimmed) {
+    return null
   }
 
-  return hour
+  const parsed = Number.parseInt(trimmed, 10)
+
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 23) {
+    return null
+  }
+
+  return parsed
 }
 
 const styles = StyleSheet.create({
@@ -350,6 +449,11 @@ const styles = StyleSheet.create({
   inputDisabled: {
     opacity: 0.8,
   },
+  helperText: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 18,
+  },
   checkboxRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -392,28 +496,63 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
   },
-  pickerScroll: {
+  clockPicker: {
     gap: 8,
+    flex: 1,
   },
-  hourChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 14,
-    borderWidth: 1,
+  clockPickerCompact: {
+    minWidth: 0,
+  },
+  clockRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  clockSeparator: {
+    color: colors.muted,
+    fontSize: 22,
+    fontWeight: '800',
+    marginTop: 18,
+  },
+  pickerColumn: {
+    flex: 1,
+    maxHeight: 168,
     borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 18,
     backgroundColor: colors.background,
   },
-  hourChipSelected: {
-    borderColor: colors.accent,
+  pickerColumnContent: {
+    padding: 6,
+    gap: 6,
+  },
+  pickerItem: {
+    borderRadius: 14,
+    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+  },
+  pickerItemSelected: {
     backgroundColor: colors.accent,
   },
-  hourChipText: {
+  pickerItemText: {
     color: colors.text,
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '800',
   },
-  hourChipTextSelected: {
+  pickerItemTextSelected: {
     color: colors.accentText,
+  },
+  feedbackText: {
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: -2,
+  },
+  feedbackSuccess: {
+    color: colors.success,
+  },
+  feedbackError: {
+    color: colors.danger,
   },
   primaryButton: {
     backgroundColor: colors.accent,
@@ -436,6 +575,9 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingVertical: 14,
     alignItems: 'center',
+  },
+  secondaryButtonDisabled: {
+    opacity: 0.7,
   },
   secondaryButtonText: {
     color: colors.text,
