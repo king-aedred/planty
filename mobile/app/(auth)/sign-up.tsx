@@ -37,6 +37,7 @@ function SignUpContent() {
   const [registrationError, setRegistrationError] = React.useState('')
   const [verificationError, setVerificationError] = React.useState('')
   const [verificationRequested, setVerificationRequested] = React.useState(false)
+  const [isResendingCode, setIsResendingCode] = React.useState(false)
 
   if (!signUp) {
     return null
@@ -136,6 +137,7 @@ function SignUpContent() {
 
   const handleResendCode = async () => {
     setVerificationError('')
+    setIsResendingCode(true)
 
     try {
       const { error } = await signUp.verifications.sendEmailCode()
@@ -147,6 +149,8 @@ function SignUpContent() {
       setCode('')
     } catch (error) {
       setVerificationError(error instanceof Error ? error.message : 'Code konnte nicht erneut gesendet werden.')
+    } finally {
+      setIsResendingCode(false)
     }
   }
 
@@ -199,9 +203,12 @@ function SignUpContent() {
 
                   <Pressable
                     style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]}
+                    disabled={isResendingCode}
                     onPress={handleResendCode}
                   >
-                    <Text style={styles.secondaryButtonText}>Neuen Code senden</Text>
+                    <Text style={styles.secondaryButtonText}>
+                      {isResendingCode ? 'Code wird gesendet...' : 'Neuen Code senden'}
+                    </Text>
                   </Pressable>
                 </View>
               </View>
