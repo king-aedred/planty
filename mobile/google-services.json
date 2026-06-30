@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "60791667432",
+    "project_id": "planty-66e97",
+    "storage_bucket": "planty-66e97.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:60791667432:android:ef9b35158e65e39d03e75d",
+        "android_client_info": {
+          "package_name": "com.kingaedred.planty"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyASY7-DDjhQMBBN9UeeWqF5nWe8CwaI27s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

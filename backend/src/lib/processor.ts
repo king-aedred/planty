@@ -42,9 +42,9 @@ type UserLookup = {
     telegram_chat_id?: string | null
     expo_push_token?: string | null
     notification_rules?: {
-        ok: Array<'push' | 'telegram' | 'call'>
-        warning: Array<'push' | 'telegram' | 'call'>
-        critical: Array<'push' | 'telegram' | 'call'>
+        ok: string[]
+        warning: string[]
+        critical: string[]
     } | null
 }
 
@@ -78,18 +78,6 @@ const getMessageText = (state: MessageState): string => {
     return "Mir geht's super! 🌱 Alles im grünen Bereich."
 }
 
-const buildStateDetails = (summary: ProcessSessionSummary): string => {
-    return [
-        `Moisture: ${summary.moisture_state}`,
-        `Temperature: ${summary.temperature_state}`,
-        `Light: ${summary.light_state}`,
-    ].join(' | ')
-}
-
-const hasCriticalState = (summary: ProcessSessionSummary): boolean => {
-    return getMessageState(summary) === 'critical'
-}
-
 const getPlantForSensor = async (summary: ProcessSessionSummary): Promise<PlantLookup | null> => {
     const { api } = await convexApiPromise
     const matchingPlants = (await convex.query(api.plants.getPlantsBySensorId, {
@@ -108,17 +96,34 @@ const getPlantForSensor = async (summary: ProcessSessionSummary): Promise<PlantL
     return matchingPlants[0]
 }
 
-const createInboxMessage = async (summary: ProcessSessionSummary): Promise<void> => {
+type N8nNotificationPayload = {
+    clerk_id: string
+    device_id: string
+    plant_name: string
+    state: MessageState
+    message: string
+    notification_rules: {
+        ok: string[]
+        warning: string[]
+        critical: string[]
+    }
+    telegram_chat_id: string | null
+    expo_push_token: string | null
+}
+
+const createInboxMessage = async (
+    summary: ProcessSessionSummary,
+): Promise<N8nNotificationPayload | null> => {
     const { api } = await convexApiPromise
     const plant = await getPlantForSensor(summary)
 
     if (!plant) {
-        return
+        return null
     }
 
     if (!plant.clerk_id) {
         console.warn('[processor] Plant has no clerk_id, skipping inbox message', summary.sensor_id)
-        return
+        return null
     }
 
     const messageState = getMessageState(summary)
@@ -131,98 +136,50 @@ const createInboxMessage = async (summary: ProcessSessionSummary): Promise<void>
         state: messageState,
         text: messageText,
     })
+
+    return {
+        clerk_id: plant.clerk_id,
+        device_id: summary.sensor_id,
+        plant_name: plant.name,
+        state: messageState,
+        message: messageText,
+        notification_rules: {
+            ok: [],
+            warning: [],
+            critical: [],
+        },
+        telegram_chat_id: null,
+        expo_push_token: null,
+    }
 }
 
-const notifyPushIfNeeded = async (summary: ProcessSessionSummary): Promise<void> => {
+const notifyN8nIfNeeded = async (payload: N8nNotificationPayload): Promise<void> => {
     const { api } = await convexApiPromise
-    const plant = await getPlantForSensor(summary)
-
-    if (!plant) {
-        return
-    }
-
-    if (!plant.clerk_id) {
-        console.warn('[processor] Plant has no clerk_id, skipping push notification', summary.sensor_id)
-        return
-    }
 
     const user = (await convex.query(api.users.getUserByClerkIdForProcessor, {
-        clerk_id: plant.clerk_id,
+        clerk_id: payload.clerk_id,
     })) as UserLookup | null
 
-    const messageState = getMessageState(summary)
-    const notificationRules = user?.notification_rules?.[messageState]
-
-    if (!notificationRules?.includes('push')) {
-        return
-    }
-
-    if (!user?.expo_push_token) {
-        console.log('[processor] Expo push token missing, skipping push notification for sensor', summary.sensor_id)
+    if (!user) {
+        console.warn('[processor] User not found for notification payload', payload.clerk_id)
         return
     }
 
     try {
-        const messageText = getMessageText(messageState)
-
-        const response = await fetch('https://exp.host/--/api/v2/push/send', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
+        const n8nPayload: N8nNotificationPayload = {
+            ...payload,
+            notification_rules: {
+                ok: user.notification_rules?.ok ?? [],
+                warning: user.notification_rules?.warning ?? [],
+                critical: user.notification_rules?.critical ?? [],
             },
-            body: JSON.stringify({
-                to: user.expo_push_token,
-                title: `🌱 ${plant.name}`,
-                body: messageText,
-                sound: 'default',
-            }),
-        })
-
-        const responseText = await response.text().catch(() => '')
-
-        if (!response.ok) {
-            console.error('[processor] Expo push request failed', response.status, responseText)
-        }
-    } catch (error) {
-        console.error('[processor] Failed to send Expo push notification', error)
-    }
-}
-
-const notifyN8nIfNeeded = async (summary: ProcessSessionSummary): Promise<void> => {
-    if (!hasCriticalState(summary)) {
-        return
-    }
-
-    const { api } = await convexApiPromise
-    const plant = await getPlantForSensor(summary)
-
-    if (!plant) {
-        return
-    }
-
-    if (!plant.clerk_id) {
-        console.warn('[processor] Plant has no clerk_id, skipping n8n notification', summary.sensor_id)
-        return
-    }
-
-    const user = (await convex.query(api.users.getUserByClerkIdForProcessor, {
-        clerk_id: plant.clerk_id,
-    })) as UserLookup | null
-
-    if (!user?.telegram_chat_id) {
-        console.log('[processor] Telegram chat id missing, skipping n8n notification for sensor', summary.sensor_id)
-        return
-    }
-
-    try {
-        const payload = {
-            chat_id: user.telegram_chat_id,
-            message: `🌱 Deine Pflanze ${plant.name} braucht Hilfe! ${buildStateDetails(summary)}`,
+            telegram_chat_id: user.telegram_chat_id ?? null,
+            expo_push_token: user.expo_push_token ?? null,
         }
 
         console.log('[processor] n8n request start', {
             url: N8N_WEBHOOK_URL,
-            payload,
+            payload: n8nPayload,
         })
 
         const response = await fetch(N8N_WEBHOOK_URL, {
@@ -230,7 +187,7 @@ const notifyN8nIfNeeded = async (summary: ProcessSessionSummary): Promise<void> 
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(payload),
+            body: JSON.stringify(n8nPayload),
         })
 
         const responseText = await response.text().catch(() => '')
@@ -297,9 +254,12 @@ export const processSessionIfReady = async (
     const { created_at, ...summaryPayload } = summary
 
     await convex.mutation(api.readings.createDailySummary, summaryPayload)
-    await createInboxMessage(summary)
-    await notifyPushIfNeeded(summary)
-    await notifyN8nIfNeeded(summary)
+    const notificationPayload = await createInboxMessage(summary)
+
+    if (notificationPayload) {
+        await notifyN8nIfNeeded(notificationPayload)
+    }
+
     await convex.mutation(api.readings.deleteReadingsBySensorAndDate, {
         sensor_id,
         date,
