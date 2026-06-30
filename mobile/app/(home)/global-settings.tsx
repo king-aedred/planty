@@ -21,6 +21,90 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 const colors = Colors.dark
 
+type NotificationRuleState = 'ok' | 'warning' | 'critical'
+type NotificationChannel = 'push' | 'telegram' | 'call'
+type NotificationRules = {
+  ok: NotificationChannel[]
+  warning: NotificationChannel[]
+  critical: NotificationChannel[]
+}
+
+type UserSettingsPayload = {
+  notification_rules?: NotificationRules
+  contact_window_start?: number
+  contact_window_end?: number
+  measure_time?: string
+  phone_number?: string
+}
+
+const notificationRuleStates: Array<{
+  key: NotificationRuleState
+  title: string
+  example: string
+  borderColor: string
+}> = [
+  {
+    key: 'ok',
+    title: '🟢 Alles gut',
+    example: "Mir geht's super! 🌱",
+    borderColor: colors.success,
+  },
+  {
+    key: 'warning',
+    title: '🟡 Brauche bald Aufmerksamkeit',
+    example: 'Ich werde langsam durstig...',
+    borderColor: colors.warning,
+  },
+  {
+    key: 'critical',
+    title: '🔴 Dringend!',
+    example: 'HILFE! Ich verdurste!',
+    borderColor: colors.critical,
+  },
+]
+
+const notificationChannels: Array<{ key: NotificationChannel; label: string; disabled?: boolean; hint?: string }> = [
+  { key: 'push', label: 'Push' },
+  { key: 'telegram', label: 'Telegram' },
+  { key: 'call', label: 'Anruf', disabled: true, hint: '(Kommt bald)' },
+]
+
+function createEmptyNotificationRules(): NotificationRules {
+  return {
+    ok: [],
+    warning: [],
+    critical: [],
+  }
+}
+
+function normalizeNotificationRules(value: Partial<NotificationRules> | undefined | null): NotificationRules {
+  const emptyRules = createEmptyNotificationRules()
+
+  if (!value) {
+    return emptyRules
+  }
+
+  const allowedChannels = new Set<NotificationChannel>(['push', 'telegram', 'call'])
+
+  const normalizeChannelList = (channels: Array<string | NotificationChannel> | undefined) => {
+    const nextChannels: NotificationChannel[] = []
+
+    for (const channel of channels ?? []) {
+      if (allowedChannels.has(channel as NotificationChannel) && !nextChannels.includes(channel as NotificationChannel)) {
+        nextChannels.push(channel as NotificationChannel)
+      }
+    }
+
+    return nextChannels
+  }
+
+  return {
+    ok: normalizeChannelList(value.ok),
+    warning: normalizeChannelList(value.warning),
+    critical: normalizeChannelList(value.critical),
+  }
+}
+
 export default function GlobalSettingsScreen() {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { useUser } = require('@clerk/expo') as typeof import('@clerk/expo')
@@ -34,10 +118,7 @@ export default function GlobalSettingsScreen() {
   const disconnectTelegram = useMutation(api.users.disconnectTelegram)
 
   const [measureTime, setMeasureTime] = useState('08:00')
-  const [notificationPush, setNotificationPush] = useState(true)
-  const [notificationTelegram, setNotificationTelegram] = useState(false)
-  const [notificationPlantyMessenger, setNotificationPlantyMessenger] = useState(false)
-  const [notificationCall, setNotificationCall] = useState(false)
+  const [notificationRules, setNotificationRules] = useState(createEmptyNotificationRules())
   const [contactWindowStart, setContactWindowStart] = useState('9')
   const [contactWindowEnd, setContactWindowEnd] = useState('21')
   const [phoneNumber, setPhoneNumber] = useState('')
@@ -72,10 +153,7 @@ export default function GlobalSettingsScreen() {
       setContactWindowEnd(String(currentUser.contact_window_end))
     }
 
-    setNotificationPush(currentUser.notification_push ?? true)
-    setNotificationTelegram(currentUser.notification_telegram ?? false)
-    setNotificationPlantyMessenger(currentUser.notification_planty_messenger ?? false)
-    setNotificationCall(currentUser.notification_call ?? false)
+    setNotificationRules(normalizeNotificationRules(currentUser.notification_rules))
     setPhoneNumber(currentUser.phone_number ?? '')
   }, [currentUser])
 
@@ -111,11 +189,8 @@ export default function GlobalSettingsScreen() {
     setIsSavingSettings(true)
 
     try {
-      const settings: Record<string, string | number | boolean | undefined> = {
-        notification_push: notificationPush,
-        notification_telegram: notificationTelegram,
-        notification_planty_messenger: notificationPlantyMessenger,
-        notification_call: notificationCall,
+      const settings: UserSettingsPayload = {
+        notification_rules: normalizeNotificationRules(notificationRules),
         measure_time: measureTimeValue,
         phone_number: phoneNumber.trim() || undefined,
       }
@@ -240,8 +315,6 @@ export default function GlobalSettingsScreen() {
               </Section>
 
               <Section title="Benachrichtigungen">
-                <CheckboxRow label="Push Notification" checked={notificationPush} onPress={() => setNotificationPush((value) => !value)} />
-                <CheckboxRow label="Telegram" checked={notificationTelegram} onPress={() => setNotificationTelegram((value) => !value)} />
                 {currentUser?.telegram_chat_id ? (
                   <View style={styles.telegramConnectionBox}>
                     <Text style={styles.telegramConnectionStatus}>✅ Telegram verbunden</Text>
@@ -267,17 +340,45 @@ export default function GlobalSettingsScreen() {
                     </Pressable>
                   </View>
                 )}
-                <CheckboxRow
-                  label="Planty Messenger"
-                  checked={notificationPlantyMessenger}
-                  onPress={() => setNotificationPlantyMessenger((value) => !value)}
-                />
-                <CheckboxRow
-                  label="Anruf"
-                  hint="Kommt bald"
-                  checked={notificationCall}
-                  onPress={() => setNotificationCall((value) => !value)}
-                />
+
+                <View style={styles.notificationRulesList}>
+                  {notificationRuleStates.map((state) => (
+                    <View key={state.key} style={[styles.notificationRuleCard, { borderColor: state.borderColor }]}>
+                      <View style={styles.notificationRuleHeader}>
+                        <Text style={styles.notificationRuleTitle}>{state.title}</Text>
+                        <Text style={styles.notificationRuleExample}>{state.example}</Text>
+                      </View>
+
+                      <View style={styles.notificationRuleOptions}>
+                        {notificationChannels.map((channel) => (
+                          <CheckboxRow
+                            key={channel.key}
+                            label={channel.label}
+                            hint={channel.hint}
+                            checked={notificationRules[state.key].includes(channel.key)}
+                            disabled={channel.disabled}
+                            onPress={() => {
+                              if (channel.disabled) {
+                                return
+                              }
+
+                              setNotificationRules((current) => {
+                                const nextValues = current[state.key].includes(channel.key)
+                                  ? current[state.key].filter((entry) => entry !== channel.key)
+                                  : [...current[state.key], channel.key]
+
+                                return {
+                                  ...current,
+                                  [state.key]: nextValues,
+                                }
+                              })
+                            }}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  ))}
+                </View>
 
                 <View style={styles.rowGroup}>
                   <Field label="Von" value={contactWindowStart} onChangeText={setContactWindowStart} placeholder="9" autoCapitalize="none" />
@@ -346,9 +447,27 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-function CheckboxRow({ label, hint, checked, onPress }: { label: string; hint?: string; checked: boolean; onPress: () => void }) {
+function CheckboxRow({
+  label,
+  hint,
+  checked,
+  disabled,
+  onPress,
+}: {
+  label: string
+  hint?: string
+  checked: boolean
+  disabled?: boolean
+  onPress: () => void
+}) {
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.checkboxRow, pressed && styles.pressed]}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: Boolean(disabled), checked }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [styles.checkboxRow, pressed && styles.pressed, disabled && styles.checkboxRowDisabled]}
+    >
       <View style={[styles.checkbox, checked && styles.checkboxChecked]}>{checked ? <Text style={styles.checkboxCheck}>✓</Text> : null}</View>
       <View style={styles.checkboxTextBlock}>
         <Text style={styles.checkboxLabel}>{label}</Text>
@@ -522,6 +641,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
+  checkboxRowDisabled: {
+    opacity: 0.55,
+  },
   checkbox: {
     width: 24,
     height: 24,
@@ -554,6 +676,32 @@ const styles = StyleSheet.create({
   checkboxHint: {
     color: colors.muted,
     fontSize: 12,
+  },
+  notificationRulesList: {
+    gap: 12,
+  },
+  notificationRuleCard: {
+    gap: 12,
+    backgroundColor: colors.background,
+    borderWidth: 1.5,
+    borderRadius: 22,
+    padding: 16,
+  },
+  notificationRuleHeader: {
+    gap: 6,
+  },
+  notificationRuleTitle: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  notificationRuleExample: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  notificationRuleOptions: {
+    gap: 10,
   },
   telegramConnectionBox: {
     gap: 10,

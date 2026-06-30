@@ -7,10 +7,13 @@ export default defineSchema({
     email: v.string(),
     plan: v.string(),
     is_dev: v.boolean(),
-    notification_push: v.optional(v.boolean()),
-    notification_telegram: v.optional(v.boolean()),
-    notification_planty_messenger: v.optional(v.boolean()),
-    notification_call: v.optional(v.boolean()),
+    notification_rules: v.optional(
+      v.object({
+        ok: v.array(v.union(v.literal("push"), v.literal("telegram"), v.literal("call"))),
+        warning: v.array(v.union(v.literal("push"), v.literal("telegram"), v.literal("call"))),
+        critical: v.array(v.union(v.literal("push"), v.literal("telegram"), v.literal("call"))),
+      }),
+    ),
     contact_window_start: v.optional(v.float64()),
     contact_window_end: v.optional(v.float64()),
     measure_time: v.optional(v.string()),

@@ -2,6 +2,14 @@ import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 
+const notificationChannelValue = v.union(v.literal("push"), v.literal("telegram"), v.literal("call"));
+
+const notificationRulesValue = v.object({
+  ok: v.array(notificationChannelValue),
+  warning: v.array(notificationChannelValue),
+  critical: v.array(notificationChannelValue),
+});
+
 const requireSelf = async (ctx: QueryCtx | MutationCtx, clerkId: string) => {
   const identity = await ctx.auth.getUserIdentity();
 
@@ -87,10 +95,7 @@ export const updateUserSettings = mutation({
   args: {
     clerk_id: v.string(),
     settings: v.object({
-      notification_push: v.optional(v.boolean()),
-      notification_telegram: v.optional(v.boolean()),
-      notification_planty_messenger: v.optional(v.boolean()),
-      notification_call: v.optional(v.boolean()),
+      notification_rules: v.optional(notificationRulesValue),
       contact_window_start: v.optional(v.number()),
       contact_window_end: v.optional(v.number()),
       measure_time: v.optional(v.string()),
@@ -110,10 +115,7 @@ export const updateUserSettings = mutation({
     }
 
     await ctx.db.patch(user._id, {
-      notification_push: args.settings.notification_push,
-      notification_telegram: args.settings.notification_telegram,
-      notification_planty_messenger: args.settings.notification_planty_messenger,
-      notification_call: args.settings.notification_call,
+      notification_rules: args.settings.notification_rules,
       contact_window_start: args.settings.contact_window_start,
       contact_window_end: args.settings.contact_window_end,
       measure_time: args.settings.measure_time,
@@ -159,10 +161,10 @@ export const connectTelegramByCode = mutation({
     chat_id: v.string(),
   },
   handler: async (ctx, args) => {
-    const normalizedCode = args.code.trim()
+    const normalizedCode = args.code.trim();
 
     if (!normalizedCode) {
-      throw new Error("Invalid code")
+      throw new Error("Invalid code");
     }
 
     const users = await ctx.db.query("users").collect();
