@@ -19,9 +19,16 @@ export default function PlantListScreen() {
 
   const clerkId = user?.id ?? ''
   const plants = useQuery(api.plants.getAllPlantsByClerkId, clerkId ? { clerk_id: clerkId } : 'skip')
+  const unreadCount = useQuery(api.messages.getUnreadCount, clerkId ? { clerk_id: clerkId } : 'skip')
+
+  console.log('unreadCount:', unreadCount)
 
   const handleAddPlant = () => {
     router.push('/(home)/add-plant')
+  }
+
+  const handleOpenInbox = () => {
+    router.push('/(home)/inbox')
   }
 
   const handleOpenPlant = (plantId: string) => {
@@ -38,6 +45,22 @@ export default function PlantListScreen() {
           <BurgerMenu />
 
           <View style={styles.headerRow}>
+            <View style={styles.inboxButtonWrapper}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={handleOpenInbox}
+                style={({ pressed }) => [styles.inboxButton, pressed && styles.inboxButtonPressed]}
+              >
+                <Text style={styles.inboxIcon}>🔔</Text>
+              </Pressable>
+
+              {typeof unreadCount === 'number' && unreadCount > 0 ? (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                </View>
+              ) : null}
+            </View>
+
             <View style={styles.headerText}>
               <Text style={styles.eyebrow}>Planty</Text>
               <Text style={styles.title}>Meine Pflanzen</Text>
@@ -190,10 +213,48 @@ const styles = StyleSheet.create({
   },
   headerRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
     gap: 16,
     paddingTop: 4,
+  },
+  inboxButtonWrapper: {
+    position: 'relative',
+    width: 44,
+    height: 44,
+  },
+  inboxButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderColor: colors.border,
+    borderWidth: 1,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inboxButtonPressed: {
+    opacity: 0.9,
+  },
+  inboxIcon: {
+    fontSize: 18,
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 10,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.critical,
+  },
+  badgeText: {
+    color: colors.criticalText,
+    fontSize: 11,
+    fontWeight: '800',
   },
   headerText: {
     flex: 1,

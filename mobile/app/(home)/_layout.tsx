@@ -6,6 +6,7 @@ export default function Layout() {
       <Stack.Screen name="index" />
       <Stack.Screen name="onboarding" />
       <Stack.Screen name="plant-list" />
+      <Stack.Screen name="inbox" />
       <Stack.Screen name="add-plant" />
       <Stack.Screen name="global-settings" />
       <Stack.Screen name="plant-settings" />

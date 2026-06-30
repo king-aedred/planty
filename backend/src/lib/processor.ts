@@ -35,10 +35,41 @@ type Reading = {
 type PlantLookup = {
     name: string
     clerk_id: string | null
+    device_id?: string | null
 }
 
 type UserLookup = {
     telegram_chat_id?: string | null
+}
+
+type MessageState = 'ok' | 'warning' | 'critical'
+
+const getMessageState = (summary: ProcessSessionSummary): MessageState => {
+    if (summary.moisture_state === 'critical') {
+        return 'critical'
+    }
+
+    if (
+        summary.moisture_state !== 'ok' ||
+        summary.temperature_state !== 'ok' ||
+        summary.light_state !== 'ok'
+    ) {
+        return 'warning'
+    }
+
+    return 'ok'
+}
+
+const getMessageText = (state: MessageState): string => {
+    if (state === 'critical') {
+        return 'HILFE! Ich brauche dringend Wasser! 😭'
+    }
+
+    if (state === 'warning') {
+        return 'Ich werde langsam durstig... 🥺'
+    }
+
+    return "Mir geht's super! 🌱 Alles im grünen Bereich."
 }
 
 const buildStateDetails = (summary: ProcessSessionSummary): string => {
@@ -50,7 +81,49 @@ const buildStateDetails = (summary: ProcessSessionSummary): string => {
 }
 
 const hasCriticalState = (summary: ProcessSessionSummary): boolean => {
-    return summary.moisture_state === 'critical' || summary.temperature_state === 'critical' || summary.light_state === 'critical'
+    return getMessageState(summary) === 'critical'
+}
+
+const getPlantForSensor = async (summary: ProcessSessionSummary): Promise<PlantLookup | null> => {
+    const { api } = await convexApiPromise
+    const matchingPlants = (await convex.query(api.plants.getPlantsBySensorId, {
+        sensor_id: summary.sensor_id,
+    })) as PlantLookup[]
+
+    if (matchingPlants.length === 0) {
+        console.warn('[processor] No plant found for sensor', summary.sensor_id)
+        return null
+    }
+
+    if (matchingPlants.length > 1) {
+        console.warn('[processor] Multiple plants found for sensor', summary.sensor_id, 'using first match')
+    }
+
+    return matchingPlants[0]
+}
+
+const createInboxMessage = async (summary: ProcessSessionSummary): Promise<void> => {
+    const { api } = await convexApiPromise
+    const plant = await getPlantForSensor(summary)
+
+    if (!plant) {
+        return
+    }
+
+    if (!plant.clerk_id) {
+        console.warn('[processor] Plant has no clerk_id, skipping inbox message', summary.sensor_id)
+        return
+    }
+
+    const messageState = getMessageState(summary)
+
+    await convex.mutation(api.messages.createMessage, {
+        clerk_id: plant.clerk_id,
+        device_id: summary.sensor_id,
+        plant_name: plant.name,
+        state: messageState,
+        text: getMessageText(messageState),
+    })
 }
 
 const notifyN8nIfNeeded = async (summary: ProcessSessionSummary): Promise<void> => {
@@ -59,20 +132,11 @@ const notifyN8nIfNeeded = async (summary: ProcessSessionSummary): Promise<void> 
     }
 
     const { api } = await convexApiPromise
-    const matchingPlants = (await convex.query(api.plants.getPlantsBySensorId, {
-        sensor_id: summary.sensor_id,
-    })) as PlantLookup[]
+    const plant = await getPlantForSensor(summary)
 
-    if (matchingPlants.length === 0) {
-        console.warn('[processor] No plant found for sensor', summary.sensor_id)
+    if (!plant) {
         return
     }
-
-    if (matchingPlants.length > 1) {
-        console.warn('[processor] Multiple plants found for sensor', summary.sensor_id, 'using first match')
-    }
-
-    const plant = matchingPlants[0]
 
     if (!plant.clerk_id) {
         console.warn('[processor] Plant has no clerk_id, skipping n8n notification', summary.sensor_id)
@@ -171,6 +235,7 @@ export const processSessionIfReady = async (
     const { created_at, ...summaryPayload } = summary
 
     await convex.mutation(api.readings.createDailySummary, summaryPayload)
+    await createInboxMessage(summary)
     await notifyN8nIfNeeded(summary)
     await convex.mutation(api.readings.deleteReadingsBySensorAndDate, {
         sensor_id,

@@ -79,4 +79,16 @@ export default defineSchema({
     ),
     created_at: v.number(),
   }).index("by_sensor_and_date", ["sensor_id", "date"]),
+
+  messages: defineTable({
+    clerk_id: v.string(),
+    device_id: v.string(),
+    plant_name: v.string(),
+    state: v.union(v.literal("ok"), v.literal("warning"), v.literal("critical")),
+    text: v.string(),
+    read: v.boolean(),
+    created_at: v.number(),
+  })
+    .index("by_clerk_id", ["clerk_id"])
+    .index("by_clerk_id_and_read", ["clerk_id", "read"]),
 });
