@@ -43,6 +43,26 @@ export const getUserByClerkId = query({
   },
 });
 
+export const getUserByClerkIdForProcessor = query({
+  args: {
+    clerk_id: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerk_id", args.clerk_id))
+      .first();
+
+    if (!user) {
+      return null;
+    }
+
+    return {
+      telegram_chat_id: user.telegram_chat_id,
+    };
+  },
+});
+
 export const createUser = mutation({
   args: {
     clerk_id: v.string(),

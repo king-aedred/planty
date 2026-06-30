@@ -1,5 +1,5 @@
 import { convex } from './convex.js'
-import { MIN_READINGS_REQUIRED } from '../config.js'
+import { MIN_READINGS_REQUIRED, N8N_WEBHOOK_URL } from '../config.js'
 import {
     calculateMedian,
     getLightState,
@@ -30,6 +30,98 @@ type Reading = {
     moisture: number
     temperature: number
     light_level: number
+}
+
+type PlantLookup = {
+    name: string
+    clerk_id: string | null
+}
+
+type UserLookup = {
+    telegram_chat_id?: string | null
+}
+
+const buildStateDetails = (summary: ProcessSessionSummary): string => {
+    return [
+        `Moisture: ${summary.moisture_state}`,
+        `Temperature: ${summary.temperature_state}`,
+        `Light: ${summary.light_state}`,
+    ].join(' | ')
+}
+
+const hasCriticalState = (summary: ProcessSessionSummary): boolean => {
+    return summary.moisture_state === 'critical' || summary.temperature_state === 'critical' || summary.light_state === 'critical'
+}
+
+const notifyN8nIfNeeded = async (summary: ProcessSessionSummary): Promise<void> => {
+    if (!hasCriticalState(summary)) {
+        return
+    }
+
+    const { api } = await convexApiPromise
+    const matchingPlants = (await convex.query(api.plants.getPlantsBySensorId, {
+        sensor_id: summary.sensor_id,
+    })) as PlantLookup[]
+
+    if (matchingPlants.length === 0) {
+        console.warn('[processor] No plant found for sensor', summary.sensor_id)
+        return
+    }
+
+    if (matchingPlants.length > 1) {
+        console.warn('[processor] Multiple plants found for sensor', summary.sensor_id, 'using first match')
+    }
+
+    const plant = matchingPlants[0]
+
+    if (!plant.clerk_id) {
+        console.warn('[processor] Plant has no clerk_id, skipping n8n notification', summary.sensor_id)
+        return
+    }
+
+    const user = (await convex.query(api.users.getUserByClerkIdForProcessor, {
+        clerk_id: plant.clerk_id,
+    })) as UserLookup | null
+
+    if (!user?.telegram_chat_id) {
+        console.log('[processor] Telegram chat id missing, skipping n8n notification for sensor', summary.sensor_id)
+        return
+    }
+
+    try {
+        const payload = {
+            chat_id: user.telegram_chat_id,
+            message: `🌱 Deine Pflanze ${plant.name} braucht Hilfe! ${buildStateDetails(summary)}`,
+        }
+
+        console.log('[processor] n8n request start', {
+            url: N8N_WEBHOOK_URL,
+            payload,
+        })
+
+        const response = await fetch(N8N_WEBHOOK_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+        })
+
+        const responseText = await response.text().catch(() => '')
+
+        console.log('[processor] n8n request end', {
+            url: N8N_WEBHOOK_URL,
+            status: response.status,
+            ok: response.ok,
+            response: responseText,
+        })
+
+        if (!response.ok) {
+            console.error('[processor] n8n webhook request failed', response.status, responseText)
+        }
+    } catch (error) {
+        console.error('[processor] Failed to reach n8n webhook', error)
+    }
 }
 
 export const processSessionIfReady = async (
@@ -79,6 +171,7 @@ export const processSessionIfReady = async (
     const { created_at, ...summaryPayload } = summary
 
     await convex.mutation(api.readings.createDailySummary, summaryPayload)
+    await notifyN8nIfNeeded(summary)
     await convex.mutation(api.readings.deleteReadingsBySensorAndDate, {
         sensor_id,
         date,

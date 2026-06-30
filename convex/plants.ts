@@ -78,6 +78,17 @@ export const getPlantByDeviceId = query({
   },
 });
 
+export const getPlantsBySensorId = query({
+  args: {
+    sensor_id: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const plants = (await ctx.db.query("plants").collect()) as Doc<"plants">[];
+
+    return plants.filter((plant) => plant.device_id === args.sensor_id || plant.sensor_id === args.sensor_id);
+  },
+});
+
 export const createPlant = mutation({
   args: {
     clerk_id: v.string(),
