@@ -55,8 +55,8 @@ export default function PlantListScreen() {
               </Pressable>
 
               {typeof unreadCount === 'number' && unreadCount > 0 ? (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                <View style={styles.inboxBadge}>
+                  <Text style={styles.inboxBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
                 </View>
               ) : null}
             </View>
@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
   inboxIcon: {
     fontSize: 18,
   },
-  badge: {
+  inboxBadge: {
     position: 'absolute',
     top: -4,
     right: -4,
@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.critical,
   },
-  badgeText: {
+  inboxBadgeText: {
     color: colors.criticalText,
     fontSize: 11,
     fontWeight: '800',

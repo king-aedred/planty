@@ -20,6 +20,7 @@ export default defineSchema({
     phone_number: v.optional(v.string()),
     telegram_chat_id: v.optional(v.string()),
     telegram_connect_code: v.optional(v.string()),
+    expo_push_token: v.optional(v.string()),
     created_at: v.number(),
   }).index("by_clerk_id", ["clerk_id"]),
 

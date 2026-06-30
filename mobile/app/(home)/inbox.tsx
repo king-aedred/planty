@@ -1,5 +1,6 @@
 import { Colors } from '@/constants/colors'
 import { api } from '../../../convex/_generated/api'
+import type { Id } from '../../../convex/_generated/dataModel'
 import { useMutation, useQuery } from 'convex/react'
 import { useRouter } from 'expo-router'
 import { useMemo } from 'react'
@@ -9,7 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 const colors = Colors.dark
 
 type Message = {
-  _id: string
+  _id: Id<'messages'>
   plant_name: string
   text: string
   state: 'ok' | 'warning' | 'critical'

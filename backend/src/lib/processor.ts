@@ -40,6 +40,12 @@ type PlantLookup = {
 
 type UserLookup = {
     telegram_chat_id?: string | null
+    expo_push_token?: string | null
+    notification_rules?: {
+        ok: Array<'push' | 'telegram' | 'call'>
+        warning: Array<'push' | 'telegram' | 'call'>
+        critical: Array<'push' | 'telegram' | 'call'>
+    } | null
 }
 
 type MessageState = 'ok' | 'warning' | 'critical'
@@ -116,14 +122,70 @@ const createInboxMessage = async (summary: ProcessSessionSummary): Promise<void>
     }
 
     const messageState = getMessageState(summary)
+    const messageText = getMessageText(messageState)
 
     await convex.mutation(api.messages.createMessage, {
         clerk_id: plant.clerk_id,
         device_id: summary.sensor_id,
         plant_name: plant.name,
         state: messageState,
-        text: getMessageText(messageState),
+        text: messageText,
     })
+}
+
+const notifyPushIfNeeded = async (summary: ProcessSessionSummary): Promise<void> => {
+    const { api } = await convexApiPromise
+    const plant = await getPlantForSensor(summary)
+
+    if (!plant) {
+        return
+    }
+
+    if (!plant.clerk_id) {
+        console.warn('[processor] Plant has no clerk_id, skipping push notification', summary.sensor_id)
+        return
+    }
+
+    const user = (await convex.query(api.users.getUserByClerkIdForProcessor, {
+        clerk_id: plant.clerk_id,
+    })) as UserLookup | null
+
+    const messageState = getMessageState(summary)
+    const notificationRules = user?.notification_rules?.[messageState]
+
+    if (!notificationRules?.includes('push')) {
+        return
+    }
+
+    if (!user?.expo_push_token) {
+        console.log('[processor] Expo push token missing, skipping push notification for sensor', summary.sensor_id)
+        return
+    }
+
+    try {
+        const messageText = getMessageText(messageState)
+
+        const response = await fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                to: user.expo_push_token,
+                title: `🌱 ${plant.name}`,
+                body: messageText,
+                sound: 'default',
+            }),
+        })
+
+        const responseText = await response.text().catch(() => '')
+
+        if (!response.ok) {
+            console.error('[processor] Expo push request failed', response.status, responseText)
+        }
+    } catch (error) {
+        console.error('[processor] Failed to send Expo push notification', error)
+    }
 }
 
 const notifyN8nIfNeeded = async (summary: ProcessSessionSummary): Promise<void> => {
@@ -236,6 +298,7 @@ export const processSessionIfReady = async (
 
     await convex.mutation(api.readings.createDailySummary, summaryPayload)
     await createInboxMessage(summary)
+    await notifyPushIfNeeded(summary)
     await notifyN8nIfNeeded(summary)
     await convex.mutation(api.readings.deleteReadingsBySensorAndDate, {
         sensor_id,

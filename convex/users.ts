@@ -67,6 +67,8 @@ export const getUserByClerkIdForProcessor = query({
 
     return {
       telegram_chat_id: user.telegram_chat_id,
+      expo_push_token: user.expo_push_token,
+      notification_rules: user.notification_rules,
     };
   },
 });
@@ -120,6 +122,31 @@ export const updateUserSettings = mutation({
       contact_window_end: args.settings.contact_window_end,
       measure_time: args.settings.measure_time,
       phone_number: args.settings.phone_number,
+    });
+
+    return user._id;
+  },
+});
+
+export const updatePushToken = mutation({
+  args: {
+    clerk_id: v.string(),
+    token: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireSelf(ctx, args.clerk_id);
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerk_id", args.clerk_id))
+      .first();
+
+    if (!user) {
+      return null;
+    }
+
+    await ctx.db.patch(user._id, {
+      expo_push_token: args.token,
     });
 
     return user._id;
