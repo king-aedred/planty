@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router'
 import { useEffect, useState } from 'react'
 import {
   Alert,
+  Linking,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -29,6 +30,8 @@ export default function GlobalSettingsScreen() {
   const clerkId = user?.id ?? ''
   const currentUser = useQuery(api.users.getUserByClerkId, clerkId ? { clerk_id: clerkId } : 'skip')
   const updateUserSettings = useMutation(api.users.updateUserSettings)
+  const generateTelegramConnectCode = useMutation(api.users.generateTelegramConnectCode)
+  const disconnectTelegram = useMutation(api.users.disconnectTelegram)
 
   const [measureTime, setMeasureTime] = useState('08:00')
   const [notificationPush, setNotificationPush] = useState(true)
@@ -44,6 +47,7 @@ export default function GlobalSettingsScreen() {
   const [timeError, setTimeError] = useState('')
   const [isSavingSettings, setIsSavingSettings] = useState(false)
   const [isSavingUsername, setIsSavingUsername] = useState(false)
+  const [isTelegramActionLoading, setIsTelegramActionLoading] = useState(false)
 
   const email = user?.primaryEmailAddress?.emailAddress ?? ''
 
@@ -180,6 +184,40 @@ export default function GlobalSettingsScreen() {
     }
   }
 
+  const handleConnectTelegram = async () => {
+    if (!clerkId || isTelegramActionLoading) {
+      return
+    }
+
+    setIsTelegramActionLoading(true)
+
+    try {
+      const code = await generateTelegramConnectCode()
+      await Linking.openURL(`https://t.me/planty247_bot?start=${code}`)
+    } catch (error) {
+      Alert.alert('Fehler', error instanceof Error ? error.message : 'Telegram konnte nicht geöffnet werden')
+    } finally {
+      setIsTelegramActionLoading(false)
+    }
+  }
+
+  const handleDisconnectTelegram = async () => {
+    if (!clerkId || isTelegramActionLoading) {
+      return
+    }
+
+    setIsTelegramActionLoading(true)
+
+    try {
+      await disconnectTelegram()
+      Alert.alert('Getrennt', 'Telegram wurde von Planty getrennt.')
+    } catch (error) {
+      Alert.alert('Fehler', error instanceof Error ? error.message : 'Telegram konnte nicht getrennt werden')
+    } finally {
+      setIsTelegramActionLoading(false)
+    }
+  }
+
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -204,6 +242,31 @@ export default function GlobalSettingsScreen() {
               <Section title="Benachrichtigungen">
                 <CheckboxRow label="Push Notification" checked={notificationPush} onPress={() => setNotificationPush((value) => !value)} />
                 <CheckboxRow label="Telegram" checked={notificationTelegram} onPress={() => setNotificationTelegram((value) => !value)} />
+                {currentUser?.telegram_chat_id ? (
+                  <View style={styles.telegramConnectionBox}>
+                    <Text style={styles.telegramConnectionStatus}>✅ Telegram verbunden</Text>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => void handleDisconnectTelegram()}
+                      disabled={isTelegramActionLoading}
+                      style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed, isTelegramActionLoading && styles.secondaryButtonDisabled]}
+                    >
+                      <Text style={styles.secondaryButtonText}>{isTelegramActionLoading ? 'Trenne…' : 'Trennen'}</Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <View style={styles.telegramConnectionBox}>
+                    <Text style={styles.telegramConnectionHint}>Verbinde dein Telegram-Konto mit Planty.</Text>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => void handleConnectTelegram()}
+                      disabled={isTelegramActionLoading}
+                      style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed, isTelegramActionLoading && styles.primaryButtonDisabled]}
+                    >
+                      <Text style={styles.primaryButtonText}>{isTelegramActionLoading ? 'Öffne…' : 'Mit Telegram verbinden'}</Text>
+                    </Pressable>
+                  </View>
+                )}
                 <CheckboxRow
                   label="Planty Messenger"
                   checked={notificationPlantyMessenger}
@@ -491,6 +554,20 @@ const styles = StyleSheet.create({
   checkboxHint: {
     color: colors.muted,
     fontSize: 12,
+  },
+  telegramConnectionBox: {
+    gap: 10,
+    paddingTop: 4,
+  },
+  telegramConnectionStatus: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  telegramConnectionHint: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 18,
   },
   rowGroup: {
     flexDirection: 'row',

@@ -78,6 +78,7 @@ const parseBooleanEnv = (value: string | undefined, defaultValue: boolean): bool
 export const CRON_INTERVAL_MINUTES = parseNumberEnv(nodeProcess?.env.CRON_INTERVAL_MINUTES, 60)
 export const MIN_READINGS_REQUIRED = parseNumberEnv(nodeProcess?.env.MIN_READINGS_REQUIRED, 12)
 export const CRON_SCHEDULE_ENABLED = parseBooleanEnv(nodeProcess?.env.CRON_SCHEDULE_ENABLED, true)
+export const TELEGRAM_BOT_TOKEN = nodeProcess?.env.TELEGRAM_BOT_TOKEN
 
 const convexUrl = nodeProcess?.env.CONVEX_URL
 const clerkSecretKey = nodeProcess?.env.CLERK_SECRET_KEY
