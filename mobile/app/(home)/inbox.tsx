@@ -34,7 +34,7 @@ export default function InboxScreen() {
   const hasMessages = formattedMessages.length > 0
 
   const handleMarkAsRead = (messageId: string) => {
-    void markAsRead({ message_id: messageId })
+    void markAsRead({ message_id: messageId as Id<'messages'> })
   }
 
   return (
