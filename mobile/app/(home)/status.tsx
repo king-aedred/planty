@@ -5,7 +5,6 @@ import { useQuery } from 'convex/react'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Dimensions,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -13,6 +12,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -21,8 +21,6 @@ import { CartesianChart, Line, useChartPressState } from 'victory-native'
 import { runOnJS, useAnimatedReaction } from 'react-native-reanimated'
 
 const colors = Colors.dark
-const screenWidth = Dimensions.get('window').width - 32
-
 type SummaryState = 'ok' | 'low' | 'critical' | 'cold' | 'hot' | 'dark' | 'bright'
 type MetricKey = 'moisture' | 'temperature' | 'light'
 type PeriodPreset = '7' | '14' | 'custom'
@@ -108,6 +106,7 @@ export default function StatusScreen() {
   const { user } = useUser()
   const router = useRouter()
   const params = useLocalSearchParams<{ plant_id?: string }>()
+  const { width } = useWindowDimensions()
 
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>('moisture')
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodPreset>('7')
@@ -152,6 +151,7 @@ export default function StatusScreen() {
         last_seen_formatted: 'unbekannt',
       }
   const todayDate = getUtcDate()
+  const chartWidth = width - 48
   const historyWindow = useMemo(() => ({ from: HISTORY_QUERY_FROM_DATE, to: todayDate }), [todayDate])
   const historicalSummaries = useQuery(
     api.plants.getHistoricalSummaries,
@@ -373,9 +373,9 @@ export default function StatusScreen() {
                           xKey="day"
                           yKeys={['value']}
                           axisOptions={{
-                            font: null,
+                            font: undefined,
                             tickCount: { x: 5, y: 5 },
-                            labelColor: colors.muted,
+                            labelColor: '#91A79B',
                             lineColor: colors.border,
                             formatXLabel: (value) => value,
                             formatYLabel: (value) => `${value}${activeMetricConfig.unit}`,
@@ -383,7 +383,7 @@ export default function StatusScreen() {
                           domain={{ y: activeMetricConfig.domain }}
                           domainPadding={{ left: 10, right: 10, top: 20, bottom: 10 }}
                           chartPressState={chartPress.state}
-                          explicitSize={{ width: screenWidth, height: 220 }}
+                          explicitSize={{ width: chartWidth, height: 220 }}
                         >
                           {({ points }) => (
                             <>
@@ -412,7 +412,7 @@ export default function StatusScreen() {
                             style={[
                               styles.chartTooltip,
                               {
-                                left: clampNumber(tooltipState.x - 56, 8, screenWidth - 120),
+                                left: clampNumber(tooltipState.x - 56, 8, chartWidth - 120),
                                 top: clampNumber(tooltipState.y - 60, 8, 220 - 68),
                               },
                             ]}

@@ -1,6 +1,7 @@
 export const Colors = {
   light: {
     text: '#11181C',
+    text_secondary: '#687076',
     background: '#FFFFFF',
     tint: '#0A7EA4',
     icon: '#687076',
@@ -21,6 +22,7 @@ export const Colors = {
   },
   dark: {
     text: '#F2F5F3',
+    text_secondary: '#91A79B',
     background: '#07130F',
     tint: '#7FD38A',
     icon: '#8BA396',

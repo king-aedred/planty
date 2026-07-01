@@ -317,13 +317,11 @@ export const getLatestSummary = query({
       return null;
     }
 
-    const summaries = (await ctx.db.query("daily_summaries").collect()) as Doc<"daily_summaries">[];
-
-    return (
-      summaries
-        .filter((summary) => summary.sensor_id === args.device_id)
-        .sort((left, right) => right.created_at - left.created_at)[0] ?? null
-    );
+    return await ctx.db
+      .query("daily_summaries")
+      .withIndex("by_sensor_and_date", (q) => q.eq("sensor_id", args.device_id))
+      .order("desc")
+      .first();
   },
 });
 
