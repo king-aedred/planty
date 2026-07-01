@@ -87,6 +87,7 @@ export default defineSchema({
     clerk_id: v.string(),
     device_id: v.string(),
     plant_name: v.string(),
+    type: v.union(v.literal("plant_message"), v.literal("system_message")),
     state: v.union(v.literal("ok"), v.literal("warning"), v.literal("critical")),
     text: v.string(),
     read: v.boolean(),

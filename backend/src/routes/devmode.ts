@@ -311,7 +311,7 @@ devModeRouter.post('/time-travel', async (c) => {
     light_level_median: lightLevelMedian,
     ...summaryStates,
     created_at: createdAt,
-  }, {
+  }, 'plant_message', {
     override_contact_window: overrideContactWindow,
   })
 

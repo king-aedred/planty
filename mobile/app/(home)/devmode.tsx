@@ -111,6 +111,7 @@ export default function DevModeScreen() {
   const [requestDebug, setRequestDebug] = useState<RequestDebug | null>(null)
   const [multiResults, setMultiResults] = useState<SensorResult[]>([])
   const [isSingleDropdownOpen, setIsSingleDropdownOpen] = useState(false)
+  const [overrideContactWindow, setOverrideContactWindow] = useState(false)
 
   const getAuthorizationHeaders = async (): Promise<Record<string, string>> => {
     const token = await getToken({ template: 'convex' })
@@ -373,6 +374,7 @@ export default function DevModeScreen() {
         body: JSON.stringify({
           device_id: targetDeviceId,
           scenario,
+          override_contact_window: overrideContactWindow,
         }),
       })
 
@@ -459,6 +461,7 @@ export default function DevModeScreen() {
         body: JSON.stringify({
           device_id: plant.deviceId,
           scenario,
+          override_contact_window: overrideContactWindow,
         }),
       })
 
@@ -705,6 +708,18 @@ export default function DevModeScreen() {
                   </Modal>
                 </View>
 
+                <Pressable
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: overrideContactWindow }}
+                  onPress={() => setOverrideContactWindow((current) => !current)}
+                  style={({ pressed }) => [styles.checkboxRow, pressed && styles.checkboxRowPressed]}
+                >
+                  <View style={[styles.inlineCheckbox, overrideContactWindow && styles.inlineCheckboxSelected]}>
+                    {overrideContactWindow ? <View style={styles.inlineCheckboxMark} /> : null}
+                  </View>
+                  <Text style={styles.checkboxRowText}>☑ Kontaktzeitfenster ignorieren</Text>
+                </Pressable>
+
                 <View style={styles.buttonGrid}>
                   {scenarioButtons.map((button) => (
                     <Pressable
@@ -823,6 +838,8 @@ export default function DevModeScreen() {
                 plants={sensorPlants}
                 serverBaseUrl={serverBaseUrl}
                 getAuthorizationHeaders={getAuthorizationHeaders}
+                overrideContactWindow={overrideContactWindow}
+                onToggleOverrideContactWindow={() => setOverrideContactWindow((current) => !current)}
               />
             ) : null}
 
@@ -983,6 +1000,41 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 14,
     lineHeight: 20,
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 6,
+    alignSelf: 'flex-start',
+  },
+  checkboxRowPressed: {
+    opacity: 0.82,
+  },
+  inlineCheckbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inlineCheckboxSelected: {
+    borderColor: colors.accent,
+    backgroundColor: 'rgba(127, 211, 138, 0.12)',
+  },
+  inlineCheckboxMark: {
+    width: 10,
+    height: 10,
+    borderRadius: 3,
+    backgroundColor: colors.accent,
+  },
+  checkboxRowText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '600',
   },
   selectorLabel: {
     color: colors.muted,

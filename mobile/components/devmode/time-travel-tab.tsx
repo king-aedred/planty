@@ -122,10 +122,14 @@ export default function TimeTravelTab({
   plants,
   serverBaseUrl,
   getAuthorizationHeaders,
+  overrideContactWindow,
+  onToggleOverrideContactWindow,
 }: {
   plants: SensorPlant[]
   serverBaseUrl: string | null
   getAuthorizationHeaders: () => Promise<Record<string, string>>
+  overrideContactWindow: boolean
+  onToggleOverrideContactWindow: () => void
 }) {
   const [selectedPlantId, setSelectedPlantId] = useState('')
   const [isPlantDropdownOpen, setIsPlantDropdownOpen] = useState(false)
@@ -210,6 +214,7 @@ export default function TimeTravelTab({
       moisture_median: targetMoisture,
       temperature_median: targetTemperature,
       light_level_median: targetLightLevel,
+      override_contact_window: overrideContactWindow,
     }
   }
 
@@ -382,6 +387,18 @@ export default function TimeTravelTab({
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>Zeitreise</Text>
       <Text style={styles.helperText}>Erstelle rückdatierte Tageszusammenfassungen direkt im Backend. Die States werden live aus deinen Eingaben berechnet.</Text>
+
+      <Pressable
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: overrideContactWindow }}
+        onPress={onToggleOverrideContactWindow}
+        style={({ pressed }) => [styles.checkboxRow, pressed && styles.checkboxRowPressed]}
+      >
+        <View style={[styles.inlineCheckbox, overrideContactWindow && styles.inlineCheckboxSelected]}>
+          {overrideContactWindow ? <View style={styles.inlineCheckboxMark} /> : null}
+        </View>
+        <Text style={styles.checkboxRowText}>☑ Kontaktzeitfenster ignorieren</Text>
+      </Pressable>
 
       <View style={styles.dropdownBlock}>
         <Text style={styles.selectorLabel}>Pflanze / Sensor auswählen</Text>
@@ -658,6 +675,41 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 14,
     lineHeight: 20,
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 6,
+    alignSelf: 'flex-start',
+  },
+  checkboxRowPressed: {
+    opacity: 0.82,
+  },
+  inlineCheckbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inlineCheckboxSelected: {
+    borderColor: colors.accent,
+    backgroundColor: 'rgba(127, 211, 138, 0.12)',
+  },
+  inlineCheckboxMark: {
+    width: 10,
+    height: 10,
+    borderRadius: 3,
+    backgroundColor: colors.accent,
+  },
+  checkboxRowText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '600',
   },
   selectorLabel: {
     color: colors.muted,
