@@ -1,9 +1,10 @@
 import { Hono } from 'hono'
 import { convex } from '../lib/convex.js'
 import { createConvexClient } from '../lib/convex.js'
-import { processSessionIfReady } from '../lib/processor.js'
+import { processSessionIfReady, sendSummaryNotifications } from '../lib/processor.js'
 import { CRON_INTERVAL_MINUTES, MIN_READINGS_REQUIRED } from '../config.js'
 import { clerkAuthMiddleware } from '../lib/auth.js'
+import { getLightState, getMoistureState, getTemperatureState } from '../lib/analysis.js'
 
 const convexApiPromise = import('../../../convex/_generated/api.js')
 
@@ -29,6 +30,14 @@ type SensorReading = {
 }
 
 const getTodayDate = (): string => new Date().toISOString().slice(0, 10)
+
+const isValidDateString = (date: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(date)
+
+const buildTimestampFromDateAndHour = (date: string, hour: number): number => {
+  const [year, month, day] = date.split('-').map((value) => Number(value))
+
+  return Date.UTC(year, month - 1, day, hour, 0, 0, 0)
+}
 
 const randomInRange = (minimum: number, maximum: number): number =>
   minimum + Math.random() * (maximum - minimum)
@@ -217,6 +226,94 @@ devModeRouter.post('/simulate', async (c) => {
     inserted: insertedIds.length,
     reset_summary: resetResult.deleted,
     result: processResult,
+  })
+})
+
+devModeRouter.post('/time-travel', async (c) => {
+  const clerkId = c.get('clerkId')
+  const clerkToken = c.get('clerkToken')
+  const isDevUser = await requireDevUser(clerkId, clerkToken)
+
+  console.log('[dev/time-travel]', { clerkId, isDevUser })
+
+  if (!isDevUser) {
+    return c.json({ error: 'forbidden' }, 403)
+  }
+
+  const body: unknown = await c.req.json().catch(() => null)
+
+  if (typeof body !== 'object' || body === null) {
+    return c.json({ error: 'Invalid JSON body' }, 400)
+  }
+
+  const payload = body as Record<string, unknown>
+  const deviceId = typeof payload.device_id === 'string' ? payload.device_id.trim() : ''
+  const date = typeof payload.date === 'string' ? payload.date.trim() : ''
+  const hour = typeof payload.hour === 'number' ? payload.hour : Number.NaN
+  const moistureMedian = typeof payload.moisture_median === 'number' ? payload.moisture_median : Number.NaN
+  const temperatureMedian = typeof payload.temperature_median === 'number' ? payload.temperature_median : Number.NaN
+  const lightLevelMedian = typeof payload.light_level_median === 'number' ? payload.light_level_median : Number.NaN
+
+  if (
+    !deviceId ||
+    !isValidDateString(date) ||
+    !Number.isInteger(hour) ||
+    hour < 0 ||
+    hour > 23 ||
+    !Number.isFinite(moistureMedian) ||
+    !Number.isFinite(temperatureMedian) ||
+    !Number.isFinite(lightLevelMedian)
+  ) {
+    return c.json(
+      {
+        error:
+          'device_id, date (YYYY-MM-DD), hour (0-23), moisture_median, temperature_median and light_level_median are required',
+      },
+      400,
+    )
+  }
+
+  const { api } = await convexApiPromise
+  const existingSummary = await convex.query(api.readings.getSummaryBySensorAndDate, {
+    sensor_id: deviceId,
+    date,
+  })
+
+  const summaryStates = {
+    moisture_state: getMoistureState(moistureMedian),
+    temperature_state: getTemperatureState(temperatureMedian),
+    light_state: getLightState(lightLevelMedian),
+  }
+
+  const createdAt = buildTimestampFromDateAndHour(date, hour)
+
+  await convex.mutation(api.readings.createDailySummaryDirect, {
+    device_id: deviceId,
+    date,
+    moisture_median: moistureMedian,
+    temperature_median: temperatureMedian,
+    light_level_median: lightLevelMedian,
+    ...summaryStates,
+    created_at: createdAt,
+  })
+
+  await sendSummaryNotifications({
+    sensor_id: deviceId,
+    date,
+    moisture_median: moistureMedian,
+    temperature_median: temperatureMedian,
+    light_level_median: lightLevelMedian,
+    ...summaryStates,
+    created_at: createdAt,
+  })
+
+  return c.json({
+    status: existingSummary ? 'overwritten' : 'created',
+    date,
+    states: summaryStates,
+    message: existingSummary
+      ? 'Zeitreise-Eintrag überschrieben und Benachrichtigung ausgelöst'
+      : 'Zeitreise-Eintrag erstellt und Benachrichtigung ausgelöst',
   })
 })
 

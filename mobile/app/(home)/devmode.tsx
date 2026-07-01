@@ -1,6 +1,7 @@
 import { Colors } from '@/constants/colors'
 import { api } from '../../../convex/_generated/api'
 import BurgerMenu from '../../components/burger-menu'
+import TimeTravelTab from '../../components/devmode/time-travel-tab'
 import { useQuery } from 'convex/react'
 import { useRouter } from 'expo-router'
 import { useEffect, useMemo, useState } from 'react'
@@ -61,7 +62,7 @@ type ProbeAttempt = {
   status?: number
 }
 
-type DevTab = 'single' | 'multi'
+type DevTab = 'single' | 'multi' | 'timeTravel'
 
 type ScenarioKey =
   | 'normal'
@@ -640,6 +641,7 @@ export default function DevModeScreen() {
             <View style={styles.tabRow}>
               <TabButton label="Single Sensor" active={activeTab === 'single'} onPress={() => setActiveTab('single')} />
               <TabButton label="Multi Sensor" active={activeTab === 'multi'} onPress={() => setActiveTab('multi')} />
+              <TabButton label="⏰ Zeitreise" active={activeTab === 'timeTravel'} onPress={() => setActiveTab('timeTravel')} />
             </View>
 
             {activeTab === 'single' ? (
@@ -814,6 +816,14 @@ export default function DevModeScreen() {
                   )}
                 </View>
               </View>
+            ) : null}
+
+            {activeTab === 'timeTravel' ? (
+              <TimeTravelTab
+                plants={sensorPlants}
+                serverBaseUrl={serverBaseUrl}
+                getAuthorizationHeaders={getAuthorizationHeaders}
+              />
             ) : null}
 
             <View style={styles.section}>

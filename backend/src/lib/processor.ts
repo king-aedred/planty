@@ -153,6 +153,14 @@ const createInboxMessage = async (
     }
 }
 
+export const sendSummaryNotifications = async (summary: ProcessSessionSummary): Promise<void> => {
+    const notificationPayload = await createInboxMessage(summary)
+
+    if (notificationPayload) {
+        await notifyN8nIfNeeded(notificationPayload)
+    }
+}
+
 const notifyN8nIfNeeded = async (payload: N8nNotificationPayload): Promise<void> => {
     const { api } = await convexApiPromise
 
@@ -254,11 +262,7 @@ export const processSessionIfReady = async (
     const { created_at, ...summaryPayload } = summary
 
     await convex.mutation(api.readings.createDailySummary, summaryPayload)
-    const notificationPayload = await createInboxMessage(summary)
-
-    if (notificationPayload) {
-        await notifyN8nIfNeeded(notificationPayload)
-    }
+    await sendSummaryNotifications(summary)
 
     await convex.mutation(api.readings.deleteReadingsBySensorAndDate, {
         sensor_id,
