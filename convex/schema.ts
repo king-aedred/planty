@@ -27,6 +27,15 @@ export default defineSchema({
   sensors: defineTable({
     device_id: v.string(),
     firmware_version: v.optional(v.string()),
+    status: v.optional(
+      v.union(
+        v.literal("active"),
+        v.literal("offline"),
+        v.literal("charging"),
+        v.literal("needs_remeasurement"),
+        v.literal("measuring"),
+      ),
+    ),
     last_seen: v.number(),
     created_at: v.number(),
   }).index("by_device_id", ["device_id"]),

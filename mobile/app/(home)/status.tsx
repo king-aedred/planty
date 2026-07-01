@@ -24,7 +24,7 @@ const colors = Colors.dark
 type SummaryState = 'ok' | 'low' | 'critical' | 'cold' | 'hot' | 'dark' | 'bright'
 type MetricKey = 'moisture' | 'temperature' | 'light'
 type PeriodPreset = '7' | '14' | 'custom'
-type SensorStatusState = 'active' | 'inactive' | 'offline' | 'unknown'
+type SensorStatusState = 'active' | 'inactive' | 'offline' | 'needs_remeasurement' | 'unknown'
 
 const HISTORY_QUERY_FROM_DATE = '1970-01-01'
 
@@ -725,7 +725,9 @@ function SensorStatusPill({
 }) {
   const config = getSensorStatusConfig(status)
   const label =
-    status === 'active'
+    status === 'needs_remeasurement'
+      ? '⚠️ Sensor braucht neue Messung'
+      : status === 'active'
       ? `Sensor aktiv · zuletzt ${lastSeenFormatted}`
       : status === 'inactive'
         ? `Sensor inaktiv · zuletzt ${lastSeenFormatted}`
@@ -735,7 +737,7 @@ function SensorStatusPill({
 
   return (
     <View style={[styles.sensorStatusPill, { backgroundColor: config.background, borderColor: config.border }]}> 
-      <Text style={[styles.sensorStatusText, { color: config.text }]}>{config.emoji} {label}</Text>
+      <Text style={[styles.sensorStatusText, { color: config.text }]}>{status === 'needs_remeasurement' ? label : `${config.emoji} ${label}`}</Text>
     </View>
   )
 }
@@ -765,6 +767,15 @@ function getSensorStatusConfig(status: SensorStatusState) {
       background: withAlpha(Colors.dark.critical, 0.14),
       border: withAlpha(Colors.dark.critical, 0.24),
       text: Colors.dark.critical,
+    }
+  }
+
+  if (status === 'needs_remeasurement') {
+    return {
+      emoji: '⚠️',
+      background: withAlpha(Colors.dark.warning, 0.14),
+      border: withAlpha(Colors.dark.warning, 0.24),
+      text: Colors.dark.warning,
     }
   }
 

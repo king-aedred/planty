@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { convex } from '../lib/convex.js'
 import { createConvexClient } from '../lib/convex.js'
 import { processSessionIfReady, sendSummaryNotifications } from '../lib/processor.js'
+import { handleSensorProblem } from '../lib/sensorProblem.js'
 import { CRON_INTERVAL_MINUTES, MIN_READINGS_REQUIRED } from '../config.js'
 import { clerkAuthMiddleware } from '../lib/auth.js'
 import { getLightState, getMoistureState, getTemperatureState } from '../lib/analysis.js'
@@ -363,6 +364,38 @@ devModeRouter.post('/trigger-cron', async (c) => {
     reset_summaries: resetSummaries,
     result,
   })
+})
+
+devModeRouter.post('/trigger-sensor-problem', async (c) => {
+  const clerkId = c.get('clerkId')
+  const clerkToken = c.get('clerkToken')
+  const isDevUser = await requireDevUser(clerkId, clerkToken)
+
+  console.log('[dev/trigger-sensor-problem]', { clerkId, isDevUser })
+
+  if (!isDevUser) {
+    return c.json({ error: 'forbidden' }, 403)
+  }
+
+  const body: unknown = await c.req.json().catch(() => null)
+
+  if (typeof body !== 'object' || body === null) {
+    return c.json({ error: 'Invalid JSON body' }, 400)
+  }
+
+  const payload = body as Record<string, unknown>
+  const deviceId = typeof payload.device_id === 'string' ? payload.device_id.trim() : ''
+
+  if (!deviceId) {
+    return c.json({ error: 'device_id is required' }, 400)
+  }
+
+  const result = await handleSensorProblem({
+    device_id: deviceId,
+    reason: 'max_retries_exceeded',
+  })
+
+  return c.json(result.body, result.statusCode)
 })
 
 export default devModeRouter

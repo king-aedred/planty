@@ -2,6 +2,14 @@ import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 
+const sensorStatusValue = v.union(
+  v.literal("active"),
+  v.literal("offline"),
+  v.literal("charging"),
+  v.literal("needs_remeasurement"),
+  v.literal("measuring"),
+);
+
 const requireAuthenticatedUser = async (ctx: QueryCtx | MutationCtx) => {
   const identity = await ctx.auth.getUserIdentity();
 
@@ -74,6 +82,14 @@ export const getSensorStatus = query({
         status: "unknown" as const,
         last_seen: null,
         last_seen_formatted: "unbekannt",
+      };
+    }
+
+    if (sensor.status === "needs_remeasurement") {
+      return {
+        status: "needs_remeasurement" as const,
+        last_seen: sensor.last_seen,
+        last_seen_formatted: formatUtcRelativeDate(sensor.last_seen),
       };
     }
 
@@ -157,5 +173,29 @@ export const updateLastSeen = mutation({
     await ctx.db.patch(sensor._id, {
       last_seen: Date.now(),
     });
+  },
+});
+
+export const setSensorStatus = mutation({
+  args: {
+    device_id: v.string(),
+    status: sensorStatusValue,
+  },
+  handler: async (ctx, args) => {
+    // Intentionally unauthenticated: this mutation is called by the backend service.
+    const sensor = await ctx.db
+      .query("sensors")
+      .withIndex("by_device_id", (q) => q.eq("device_id", args.device_id))
+      .first();
+
+    if (!sensor) {
+      return { found: false } as const;
+    }
+
+    await ctx.db.patch(sensor._id, {
+      status: args.status,
+    });
+
+    return { found: true } as const;
   },
 });

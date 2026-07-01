@@ -434,6 +434,86 @@ export default function DevModeScreen() {
     return await runScenarioRequest(targetDeviceId, scenario)
   }
 
+  const triggerSensorProblem = async (targetDeviceId: string) => {
+    if (!targetDeviceId || isLoading || !serverBaseUrl) {
+      return
+    }
+
+    setIsLoading(true)
+    setErrorMessage('')
+    setStatusMessage('')
+    setRequestDebug({
+      label: 'dev/trigger-sensor-problem',
+      url: `${serverBaseUrl}/dev/trigger-sensor-problem`,
+      method: 'POST',
+    })
+
+    try {
+      const url = `${serverBaseUrl}/dev/trigger-sensor-problem`
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+      const authorizationHeaders = await getAuthorizationHeaders()
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authorizationHeaders,
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          device_id: targetDeviceId,
+        }),
+      })
+
+      clearTimeout(timeout)
+
+      const responseBody = await response.json()
+
+      if (!response.ok) {
+        setRequestDebug({
+          label: 'dev/trigger-sensor-problem',
+          url,
+          method: 'POST',
+          status: response.status,
+          responseText: JSON.stringify(responseBody, null, 2),
+        })
+        throw new Error(responseBody?.error ?? 'Sensor Problem Simulation fehlgeschlagen')
+      }
+
+      setRequestDebug({
+        label: 'dev/trigger-sensor-problem',
+        url,
+        method: 'POST',
+        status: response.status,
+        responseText: JSON.stringify(responseBody, null, 2),
+      })
+      setStatusMessage(JSON.stringify(responseBody, null, 2))
+    } catch (error) {
+      const errorName = error instanceof Error ? error.name : 'Error'
+      const errorMessage = error instanceof Error ? error.message : 'Sensor Problem Simulation fehlgeschlagen'
+
+      setRequestDebug((current) =>
+        current
+          ? {
+              ...current,
+              errorName,
+              errorMessage,
+            }
+          : {
+              label: 'dev/trigger-sensor-problem',
+              url: `${serverBaseUrl ?? SERVER_CANDIDATES[0]}/dev/trigger-sensor-problem`,
+              method: 'POST',
+              errorName,
+              errorMessage,
+            },
+      )
+      setErrorMessage(errorMessage)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const simulateSensorRequest = async (plant: SensorPlant, scenario: ScenarioKey): Promise<SensorResult> => {
     if (!serverBaseUrl) {
       return {
@@ -732,6 +812,15 @@ export default function DevModeScreen() {
                     </Pressable>
                   ))}
                 </View>
+
+                <Pressable
+                  accessibilityRole="button"
+                  style={({ pressed }) => [styles.cronButton, pressed && styles.buttonPressed, isLoading && styles.buttonDisabled]}
+                  disabled={isLoading || !selectedSinglePlant?.deviceId}
+                  onPress={() => void triggerSensorProblem(selectedSinglePlant?.deviceId ?? '')}
+                >
+                  <Text style={styles.cronButtonText}>📡 Sensor Problem simulieren</Text>
+                </Pressable>
 
                 <View style={styles.resultPanel}>
                   <Text style={styles.resultTitle}>Ergebnis</Text>
