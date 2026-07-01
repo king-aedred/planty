@@ -26,6 +26,7 @@ const screenWidth = Dimensions.get('window').width - 32
 type SummaryState = 'ok' | 'low' | 'critical' | 'cold' | 'hot' | 'dark' | 'bright'
 type MetricKey = 'moisture' | 'temperature' | 'light'
 type PeriodPreset = '7' | '14' | 'custom'
+type SensorStatusState = 'active' | 'inactive' | 'offline' | 'unknown'
 
 const HISTORY_QUERY_FROM_DATE = '1970-01-01'
 
@@ -133,6 +134,23 @@ export default function StatusScreen() {
   }, [params.plant_id, plants])
 
   const latestSummary = resolvedPlant.latestSummary
+  const sensorStatus = useQuery(
+    api.sensors.getSensorStatus,
+    resolvedPlant.deviceId ? { device_id: resolvedPlant.deviceId } : 'skip',
+  ) as
+    | {
+        status: SensorStatusState
+        last_seen: number | null
+        last_seen_formatted: string
+      }
+    | undefined
+  const sensorStatusDisplay = resolvedPlant.deviceId
+    ? sensorStatus
+    : {
+        status: 'unknown' as const,
+        last_seen: null,
+        last_seen_formatted: 'unbekannt',
+      }
   const todayDate = getUtcDate()
   const historyWindow = useMemo(() => ({ from: HISTORY_QUERY_FROM_DATE, to: todayDate }), [todayDate])
   const historicalSummaries = useQuery(
@@ -262,6 +280,12 @@ export default function StatusScreen() {
                 <Text style={styles.eyebrow}>Planty Status</Text>
                 <Text style={styles.title}>{resolvedPlant.name}</Text>
                 <Text style={styles.deviceId}>{resolvedPlant.deviceId || 'Kein Sensor verbunden'}</Text>
+                {sensorStatusDisplay ? (
+                  <SensorStatusPill
+                    status={sensorStatusDisplay.status}
+                    lastSeenFormatted={sensorStatusDisplay.last_seen_formatted}
+                  />
+                ) : null}
               </View>
             </View>
 
@@ -692,6 +716,82 @@ function lightTone(state: SummaryState) {
   return 'warning'
 }
 
+function SensorStatusPill({
+  status,
+  lastSeenFormatted,
+}: {
+  status: SensorStatusState
+  lastSeenFormatted: string
+}) {
+  const config = getSensorStatusConfig(status)
+  const label =
+    status === 'active'
+      ? `Sensor aktiv · zuletzt ${lastSeenFormatted}`
+      : status === 'inactive'
+        ? `Sensor inaktiv · zuletzt ${lastSeenFormatted}`
+        : status === 'offline'
+          ? `Sensor offline · zuletzt ${lastSeenFormatted}`
+          : 'Sensor Status unbekannt'
+
+  return (
+    <View style={[styles.sensorStatusPill, { backgroundColor: config.background, borderColor: config.border }]}> 
+      <Text style={[styles.sensorStatusText, { color: config.text }]}>{config.emoji} {label}</Text>
+    </View>
+  )
+}
+
+function getSensorStatusConfig(status: SensorStatusState) {
+  if (status === 'active') {
+    return {
+      emoji: '🟢',
+      background: withAlpha(Colors.dark.success, 0.12),
+      border: withAlpha(Colors.dark.success, 0.22),
+      text: Colors.dark.success,
+    }
+  }
+
+  if (status === 'inactive') {
+    return {
+      emoji: '🟡',
+      background: withAlpha(Colors.dark.warning, 0.14),
+      border: withAlpha(Colors.dark.warning, 0.24),
+      text: Colors.dark.warning,
+    }
+  }
+
+  if (status === 'offline') {
+    return {
+      emoji: '🔴',
+      background: withAlpha(Colors.dark.critical, 0.14),
+      border: withAlpha(Colors.dark.critical, 0.24),
+      text: Colors.dark.critical,
+    }
+  }
+
+  return {
+    emoji: '❓',
+    background: withAlpha(Colors.dark.muted, 0.12),
+    border: withAlpha(Colors.dark.muted, 0.22),
+    text: Colors.dark.muted,
+  }
+}
+
+function withAlpha(hexColor: string, alpha: number) {
+  const normalized = hexColor.replace('#', '')
+  const value = normalized.length === 3
+    ? normalized
+        .split('')
+        .map((character) => character + character)
+        .join('')
+    : normalized
+
+  const red = Number.parseInt(value.slice(0, 2), 16)
+  const green = Number.parseInt(value.slice(2, 4), 16)
+  const blue = Number.parseInt(value.slice(4, 6), 16)
+
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`
+}
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -737,6 +837,18 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 14,
     lineHeight: 20,
+  },
+  sensorStatusPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    marginTop: 2,
+  },
+  sensorStatusText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   settingsButton: {
     width: '100%',

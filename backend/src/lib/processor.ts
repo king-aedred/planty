@@ -43,6 +43,8 @@ type PlantLookup = {
 type UserLookup = {
     telegram_chat_id?: string | null
     expo_push_token?: string | null
+    contact_window_start?: number | null
+    contact_window_end?: number | null
     notification_rules?: {
         ok: string[]
         warning: string[]
@@ -127,9 +129,11 @@ type N8nNotificationPayload = {
     expo_push_token: string | null
 }
 
-const createInboxMessage = async (
-    summary: ProcessSessionSummary,
-): Promise<N8nNotificationPayload | null> => {
+type NotificationOptions = {
+    override_contact_window?: boolean
+}
+
+const createInboxMessage = async (summary: ProcessSessionSummary): Promise<N8nNotificationPayload | null> => {
     const { api } = await convexApiPromise
     const plant = await getPlantForSensor(summary)
 
@@ -179,15 +183,30 @@ const createInboxMessage = async (
     }
 }
 
-export const sendSummaryNotifications = async (summary: ProcessSessionSummary): Promise<void> => {
+const isOutsideContactWindow = (
+    currentHour: number,
+    contactWindowStart: number,
+    contactWindowEnd: number,
+): boolean => {
+    if (contactWindowStart < contactWindowEnd) {
+        return currentHour < contactWindowStart || currentHour >= contactWindowEnd
+    }
+
+    return currentHour < contactWindowStart && currentHour >= contactWindowEnd
+}
+
+export const sendSummaryNotifications = async (
+    summary: ProcessSessionSummary,
+    options: NotificationOptions = {},
+): Promise<void> => {
     const notificationPayload = await createInboxMessage(summary)
 
     if (notificationPayload) {
-        await notifyN8nIfNeeded(notificationPayload)
+        await notifyN8nIfNeeded(notificationPayload, options)
     }
 }
 
-const notifyN8nIfNeeded = async (payload: N8nNotificationPayload): Promise<void> => {
+const notifyN8nIfNeeded = async (payload: N8nNotificationPayload, options: NotificationOptions = {}): Promise<void> => {
     const { api } = await convexApiPromise
 
     const user = (await convex.query(api.users.getUserByClerkIdForProcessor, {
@@ -209,6 +228,23 @@ const notifyN8nIfNeeded = async (payload: N8nNotificationPayload): Promise<void>
             },
             telegram_chat_id: user.telegram_chat_id ?? null,
             expo_push_token: user.expo_push_token ?? null,
+        }
+
+        const contactWindowStart = user.contact_window_start
+        const contactWindowEnd = user.contact_window_end
+
+        if (!options.override_contact_window && contactWindowStart !== undefined && contactWindowEnd !== undefined) {
+            const currentHour = new Date().getUTCHours()
+
+            if (isOutsideContactWindow(currentHour, contactWindowStart, contactWindowEnd)) {
+                console.log('[processor] Außerhalb Kontaktzeitfenster, externe Benachrichtigung übersprungen', {
+                    currentHour,
+                    contact_window_start: contactWindowStart,
+                    contact_window_end: contactWindowEnd,
+                })
+
+                return
+            }
         }
 
         console.log('[processor] n8n request start', {
@@ -244,6 +280,7 @@ const notifyN8nIfNeeded = async (payload: N8nNotificationPayload): Promise<void>
 export const processSessionIfReady = async (
     sensor_id: string,
     date: string,
+    options: NotificationOptions = {},
 ): Promise<ProcessSessionResult> => {
     const { api } = await convexApiPromise
 
@@ -288,7 +325,7 @@ export const processSessionIfReady = async (
     const { created_at, ...summaryPayload } = summary
 
     await convex.mutation(api.readings.createDailySummary, summaryPayload)
-    await sendSummaryNotifications(summary)
+    await sendSummaryNotifications(summary, options)
 
     await convex.mutation(api.readings.deleteReadingsBySensorAndDate, {
         sensor_id,

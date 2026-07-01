@@ -69,6 +69,8 @@ export const getUserByClerkIdForProcessor = query({
       telegram_chat_id: user.telegram_chat_id,
       expo_push_token: user.expo_push_token,
       notification_rules: user.notification_rules,
+      contact_window_start: user.contact_window_start,
+      contact_window_end: user.contact_window_end,
     };
   },
 });

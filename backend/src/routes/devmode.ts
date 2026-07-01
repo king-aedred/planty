@@ -164,6 +164,7 @@ devModeRouter.post('/simulate', async (c) => {
   const payload = body as Record<string, unknown>
   const deviceId = typeof payload.device_id === 'string' ? payload.device_id.trim() : ''
   const scenario = payload.scenario as Scenario | undefined
+  const overrideContactWindow = payload.override_contact_window === true
 
   if (!deviceId || !scenario) {
     return c.json({ error: 'device_id and scenario are required' }, 400)
@@ -208,10 +209,14 @@ devModeRouter.post('/simulate', async (c) => {
     return c.json({ status: 'no_data', inserted: 0 })
   }
 
-  const processResult = await processSessionIfReady(deviceId, date)
+  const processResult = await processSessionIfReady(deviceId, date, {
+    override_contact_window: overrideContactWindow,
+  })
 
   if (scenario === 'duplicate') {
-    const duplicateResult = await processSessionIfReady(deviceId, date)
+    const duplicateResult = await processSessionIfReady(deviceId, date, {
+      override_contact_window: overrideContactWindow,
+    })
 
     return c.json({
       status: 'duplicate_attempted',
@@ -253,6 +258,7 @@ devModeRouter.post('/time-travel', async (c) => {
   const moistureMedian = typeof payload.moisture_median === 'number' ? payload.moisture_median : Number.NaN
   const temperatureMedian = typeof payload.temperature_median === 'number' ? payload.temperature_median : Number.NaN
   const lightLevelMedian = typeof payload.light_level_median === 'number' ? payload.light_level_median : Number.NaN
+  const overrideContactWindow = payload.override_contact_window === true
 
   if (
     !deviceId ||
@@ -305,6 +311,8 @@ devModeRouter.post('/time-travel', async (c) => {
     light_level_median: lightLevelMedian,
     ...summaryStates,
     created_at: createdAt,
+  }, {
+    override_contact_window: overrideContactWindow,
   })
 
   return c.json({
