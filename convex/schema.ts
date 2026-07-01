@@ -46,6 +46,8 @@ export default defineSchema({
     sensor_id: v.optional(v.string()),
     clerk_id: v.optional(v.string()),
     name: v.string(),
+    consecutive_critical_days: v.optional(v.number()),
+    last_critical_date: v.optional(v.string()),
     moisture_threshold: v.optional(v.number()),
     temperature_threshold_min: v.optional(v.number()),
     temperature_threshold_max: v.optional(v.number()),

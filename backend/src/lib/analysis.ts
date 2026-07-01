@@ -48,3 +48,15 @@ export const getLightState = (median: number): 'dark' | 'ok' | 'bright' => {
 
     return 'bright'
 }
+
+export const getEscalationMessage = (days: number): string => {
+    if (days === 1) {
+        return 'Hey! Ich hab ein bisschen Durst bekommen 😅\nKannst du mich heute noch gießen?'
+    }
+
+    if (days === 2) {
+        return 'Okay ich mach mir langsam Sorgen...\nich bin wirklich durstig 😰\nBitte vergiss mich nicht!'
+    }
+
+    return `ICH FLEHE DICH AN! 🚨 Seit ${days} Tagen kein Wasser!\nIch gehe ein wenn du nicht bald gießt! BITTE!`
+}

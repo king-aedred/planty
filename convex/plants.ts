@@ -15,6 +15,23 @@ const requireSelf = async (ctx: QueryCtx | MutationCtx, clerkId: string) => {
   }
 };
 
+async function getOwnedPlantByDeviceId(ctx: QueryCtx, deviceId: string) {
+  const identity = await ctx.auth.getUserIdentity();
+
+  if (!identity) {
+    return null;
+  }
+
+  const plants = (await ctx.db.query("plants").collect()) as Doc<"plants">[];
+  const matchedPlant = plants.find((entry) => entry.device_id === deviceId || entry.sensor_id === deviceId) ?? null;
+
+  if (!matchedPlant || matchedPlant.clerk_id !== identity.subject) {
+    return null;
+  }
+
+  return matchedPlant;
+}
+
 async function getPlantsWithLatestSummaries(ctx: QueryCtx, clerkId: string): Promise<PlantWithLatestSummary[]> {
   await requireSelf(ctx, clerkId);
 
@@ -42,6 +59,15 @@ async function getPlantsWithLatestSummaries(ctx: QueryCtx, clerkId: string): Pro
       };
     });
 }
+
+const getYesterdayDate = (date: string): string => {
+  const [year, month, day] = date.split("-").map(Number);
+  const yesterday = new Date(Date.UTC(year, month - 1, day));
+
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+
+  return yesterday.toISOString().slice(0, 10);
+};
 
 export const getPlantsByClerkId = query({
   args: {
@@ -120,6 +146,53 @@ export const createPlant = mutation({
           }
         : {}),
     });
+  },
+});
+
+export const incrementCriticalDays = mutation({
+  args: {
+    device_id: v.string(),
+    date: v.string(),
+  },
+  handler: async (ctx: MutationCtx, args) => {
+    const plants = (await ctx.db.query("plants").collect()) as Doc<"plants">[];
+    const plant = plants.find((entry) => entry.device_id === args.device_id || entry.sensor_id === args.device_id);
+
+    if (!plant) {
+      return 0;
+    }
+
+    const yesterday = getYesterdayDate(args.date);
+    const consecutiveCriticalDays =
+      plant.last_critical_date === yesterday ? (plant.consecutive_critical_days ?? 0) + 1 : 1;
+
+    await ctx.db.patch(plant._id, {
+      consecutive_critical_days: consecutiveCriticalDays,
+      last_critical_date: args.date,
+    });
+
+    return consecutiveCriticalDays;
+  },
+});
+
+export const resetCriticalDays = mutation({
+  args: {
+    device_id: v.string(),
+  },
+  handler: async (ctx: MutationCtx, args) => {
+    const plants = (await ctx.db.query("plants").collect()) as Doc<"plants">[];
+    const plant = plants.find((entry) => entry.device_id === args.device_id || entry.sensor_id === args.device_id);
+
+    if (!plant) {
+      return null;
+    }
+
+    await ctx.db.patch(plant._id, {
+      consecutive_critical_days: 0,
+      last_critical_date: undefined,
+    });
+
+    return plant._id;
   },
 });
 
@@ -238,16 +311,9 @@ export const getLatestSummary = query({
     device_id: v.string(),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
+    const ownedPlant = await getOwnedPlantByDeviceId(ctx, args.device_id);
 
-    if (!identity) {
-      return null;
-    }
-
-    const plants = (await ctx.db.query("plants").collect()) as Doc<"plants">[];
-    const ownedPlant = plants.find((entry) => entry.device_id === args.device_id || entry.sensor_id === args.device_id);
-
-    if (!ownedPlant || ownedPlant.clerk_id !== identity.subject) {
+    if (!ownedPlant) {
       return null;
     }
 
@@ -258,5 +324,27 @@ export const getLatestSummary = query({
         .filter((summary) => summary.sensor_id === args.device_id)
         .sort((left, right) => right.created_at - left.created_at)[0] ?? null
     );
+  },
+});
+
+export const getHistoricalSummaries = query({
+  args: {
+    device_id: v.string(),
+    from_date: v.string(),
+    to_date: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const ownedPlant = await getOwnedPlantByDeviceId(ctx, args.device_id);
+
+    if (!ownedPlant) {
+      return [];
+    }
+
+    return await ctx.db
+      .query("daily_summaries")
+      .withIndex("by_sensor_and_date", (q) =>
+        q.eq("sensor_id", args.device_id).gte("date", args.from_date).lte("date", args.to_date),
+      )
+      .collect();
   },
 });

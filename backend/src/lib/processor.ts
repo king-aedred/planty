@@ -2,6 +2,7 @@ import { convex } from './convex.js'
 import { MIN_READINGS_REQUIRED, N8N_WEBHOOK_URL } from '../config.js'
 import {
     calculateMedian,
+    getEscalationMessage,
     getLightState,
     getMoistureState,
     getTemperatureState,
@@ -33,6 +34,7 @@ type Reading = {
 }
 
 type PlantLookup = {
+    _id: string
     name: string
     clerk_id: string | null
     device_id?: string | null
@@ -66,16 +68,30 @@ const getMessageState = (summary: ProcessSessionSummary): MessageState => {
     return 'ok'
 }
 
-const getMessageText = (state: MessageState): string => {
-    if (state === 'critical') {
-        return 'HILFE! Ich brauche dringend Wasser! 😭'
-    }
-
+const getStandardMessageText = (state: MessageState): string => {
     if (state === 'warning') {
         return 'Ich werde langsam durstig... 🥺'
     }
 
     return "Mir geht's super! 🌱 Alles im grünen Bereich."
+}
+
+const updateCriticalState = async (summary: ProcessSessionSummary, plant: PlantLookup): Promise<number | null> => {
+    const { api } = await convexApiPromise
+    const deviceId = plant.device_id ?? summary.sensor_id
+
+    if (summary.moisture_state === 'critical') {
+        return (await convex.mutation(api.plants.incrementCriticalDays, {
+            device_id: deviceId,
+            date: summary.date,
+        })) as number
+    }
+
+    await convex.mutation(api.plants.resetCriticalDays, {
+        device_id: deviceId,
+    })
+
+    return null
 }
 
 const getPlantForSensor = async (summary: ProcessSessionSummary): Promise<PlantLookup | null> => {
@@ -121,13 +137,23 @@ const createInboxMessage = async (
         return null
     }
 
+    const criticalDays = await updateCriticalState(summary, plant)
+
     if (!plant.clerk_id) {
         console.warn('[processor] Plant has no clerk_id, skipping inbox message', summary.sensor_id)
         return null
     }
 
     const messageState = getMessageState(summary)
-    const messageText = getMessageText(messageState)
+
+    if (messageState === 'critical' && criticalDays === null) {
+        throw new Error('[processor] Missing critical day count for escalation message')
+    }
+
+    const messageText =
+        messageState === 'critical'
+            ? getEscalationMessage(criticalDays)
+            : getStandardMessageText(messageState)
 
     await convex.mutation(api.messages.createMessage, {
         clerk_id: plant.clerk_id,
