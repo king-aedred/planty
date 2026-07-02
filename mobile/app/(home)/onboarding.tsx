@@ -3,18 +3,9 @@ import { api } from '../../../convex/_generated/api'
 import BurgerMenu from '../../components/burger-menu'
 import { useMutation, useQuery } from 'convex/react'
 import { useRouter } from 'expo-router'
+import { Alert, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableWithoutFeedback, View } from 'react-native'
 import { useState } from 'react'
 import {
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableWithoutFeedback,
-  View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
@@ -82,7 +73,20 @@ export default function OnboardingScreen() {
         species_id: selectedSpecies?.id,
         name: trimmedPlantName,
       })
-      router.replace({ pathname: '/(home)/status', params: { device_id: trimmedDeviceId, name: trimmedPlantName } })
+      Alert.alert(
+        'Schwellenwerte eingesetzt ✅',
+        selectedSpecies
+          ? 'Pflanzenspezifische Schwellenwerte wurden automatisch eingesetzt. Du kannst sie jederzeit in den Pflanzen-Einstellungen anpassen.'
+          : 'Wir nutzen allgemeine Standardwerte da wir deine Pflanze nicht kennen. Du kannst sie in den Pflanzen-Einstellungen anpassen.',
+        [
+          {
+            text: 'Verstanden',
+            onPress: () => {
+              router.replace({ pathname: '/(home)/status', params: { device_id: trimmedDeviceId, name: trimmedPlantName } })
+            },
+          },
+        ],
+      )
     } catch (error) {
       const message = error instanceof Error ? error.message : ''
 

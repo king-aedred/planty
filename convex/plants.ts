@@ -3,6 +3,15 @@ import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 
+const DEFAULT_THRESHOLDS = {
+  moisture_critical: 20,
+  moisture_warning: 35,
+  temperature_min: 15,
+  temperature_max: 30,
+  light_min: 150,
+  light_max: 800,
+} as const;
+
 type PlantWithLatestSummary = Doc<"plants"> & {
   latestSummary: Doc<"daily_summaries"> | null;
 };
@@ -154,13 +163,21 @@ export const createPlant = mutation({
       created_at: Date.now(),
       ...(species
         ? {
-            moisture_threshold: species.moisture_warning,
+            moisture_threshold: species.moisture_critical,
+            moisture_warning_threshold: species.moisture_warning,
             temperature_threshold_min: species.temperature_min,
             temperature_threshold_max: species.temperature_max,
             light_threshold_min: species.light_min,
             light_threshold_max: species.light_max,
           }
-        : {}),
+        : {
+            moisture_threshold: DEFAULT_THRESHOLDS.moisture_critical,
+            moisture_warning_threshold: DEFAULT_THRESHOLDS.moisture_warning,
+            temperature_threshold_min: DEFAULT_THRESHOLDS.temperature_min,
+            temperature_threshold_max: DEFAULT_THRESHOLDS.temperature_max,
+            light_threshold_min: DEFAULT_THRESHOLDS.light_min,
+            light_threshold_max: DEFAULT_THRESHOLDS.light_max,
+          }),
       ...(args.device_id
         ? {
             device_id: args.device_id,
@@ -168,6 +185,30 @@ export const createPlant = mutation({
           }
         : {}),
     });
+  },
+});
+
+export const getPlantThresholds = query({
+  args: {
+    device_id: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Intentionally no auth check - called by backend processor only
+    const plants = (await ctx.db.query("plants").collect()) as Doc<"plants">[];
+    const plant = plants.find((entry) => entry.device_id === args.device_id || entry.sensor_id === args.device_id);
+
+    if (!plant) {
+      return DEFAULT_THRESHOLDS;
+    }
+
+    return {
+      moisture_critical: plant.moisture_threshold ?? DEFAULT_THRESHOLDS.moisture_critical,
+      moisture_warning: plant.moisture_warning_threshold ?? DEFAULT_THRESHOLDS.moisture_warning,
+      temperature_min: plant.temperature_threshold_min ?? DEFAULT_THRESHOLDS.temperature_min,
+      temperature_max: plant.temperature_threshold_max ?? DEFAULT_THRESHOLDS.temperature_max,
+      light_min: plant.light_threshold_min ?? DEFAULT_THRESHOLDS.light_min,
+      light_max: plant.light_threshold_max ?? DEFAULT_THRESHOLDS.light_max,
+    };
   },
 });
 

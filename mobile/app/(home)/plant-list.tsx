@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 const colors = Colors.dark
 
-type SummaryState = 'ok' | 'low' | 'critical' | 'cold' | 'hot' | 'dark' | 'bright'
+type SummaryState = 'ok' | 'warning' | 'critical' | 'cold' | 'hot' | 'dark' | 'bright'
 type BadgeTone = 'success' | 'warning' | 'critical'
 
 export default function PlantListScreen() {

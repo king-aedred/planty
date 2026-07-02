@@ -125,8 +125,21 @@ export default function AddPlantScreen() {
         name: trimmedPlantName,
         ...(selectedSpecies ? { species_id: selectedSpecies.id } : {}),
       })
-      resetForm()
-      goToPlantList()
+      Alert.alert(
+        'Schwellenwerte eingesetzt ✅',
+        selectedSpecies
+          ? 'Pflanzenspezifische Schwellenwerte wurden automatisch eingesetzt. Du kannst sie jederzeit in den Pflanzen-Einstellungen anpassen.'
+          : 'Wir nutzen allgemeine Standardwerte da wir deine Pflanze nicht kennen. Du kannst sie in den Pflanzen-Einstellungen anpassen.',
+        [
+          {
+            text: 'Verstanden',
+            onPress: () => {
+              resetForm()
+              goToPlantList()
+            },
+          },
+        ],
+      )
     } catch (error) {
       const message = error instanceof Error ? error.message : ''
 
@@ -156,8 +169,21 @@ export default function AddPlantScreen() {
         name: trimmedPlantName,
         ...(selectedSpecies ? { species_id: selectedSpecies.id } : {}),
       })
-      resetForm()
-      goToPlantList()
+      Alert.alert(
+        'Schwellenwerte eingesetzt ✅',
+        selectedSpecies
+          ? 'Pflanzenspezifische Schwellenwerte wurden automatisch eingesetzt. Du kannst sie jederzeit in den Pflanzen-Einstellungen anpassen.'
+          : 'Wir nutzen allgemeine Standardwerte da wir deine Pflanze nicht kennen. Du kannst sie in den Pflanzen-Einstellungen anpassen.',
+        [
+          {
+            text: 'Verstanden',
+            onPress: () => {
+              resetForm()
+              goToPlantList()
+            },
+          },
+        ],
+      )
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Pflanze konnte nicht angelegt werden')
     } finally {

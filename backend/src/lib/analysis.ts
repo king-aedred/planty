@@ -13,20 +13,79 @@ export const calculateMedian = (values: number[]): number => {
     return (sortedValues[middleIndex - 1] + sortedValues[middleIndex]) / 2
 }
 
-export const getMoistureState = (median: number): 'critical' | 'low' | 'ok' => {
-    if (median < 20) {
+export const DEFAULT_THRESHOLDS = {
+    moisture_critical: 20,
+    moisture_warning: 35,
+    temperature_min: 15,
+    temperature_max: 30,
+    light_min: 150,
+    light_max: 800,
+} as const
+
+export const getMoistureStateCustom = (
+    value: number,
+    criticalThreshold: number,
+    warningThreshold: number,
+): 'critical' | 'warning' | 'ok' => {
+    if (value < criticalThreshold) {
         return 'critical'
     }
 
-    if (median <= 40) {
-        return 'low'
+    if (value < warningThreshold) {
+        return 'warning'
     }
 
     return 'ok'
 }
 
+export const getTemperatureStateCustom = (
+    value: number,
+    min: number,
+    max: number,
+): 'cold' | 'ok' | 'hot' => {
+    if (value < min) {
+        return 'cold'
+    }
+
+    if (value > max) {
+        return 'hot'
+    }
+
+    return 'ok'
+}
+
+export const getLightStateCustom = (
+    value: number,
+    min: number,
+    max: number,
+): 'dark' | 'ok' | 'bright' => {
+    if (value < min) {
+        return 'dark'
+    }
+
+    if (value > max) {
+        return 'bright'
+    }
+
+    return 'ok'
+}
+
+/** @deprecated Use getMoistureStateCustom with explicit thresholds instead. */
+export const getMoistureState = (median: number): 'critical' | 'warning' | 'ok' => {
+    if (median < DEFAULT_THRESHOLDS.moisture_critical) {
+        return 'critical'
+    }
+
+    if (median <= 40) {
+        return 'warning'
+    }
+
+    return 'ok'
+}
+
+/** @deprecated Use getTemperatureStateCustom with explicit thresholds instead. */
 export const getTemperatureState = (median: number): 'cold' | 'ok' | 'hot' => {
-    if (median < 15) {
+    if (median < DEFAULT_THRESHOLDS.temperature_min) {
         return 'cold'
     }
 
@@ -37,12 +96,13 @@ export const getTemperatureState = (median: number): 'cold' | 'ok' | 'hot' => {
     return 'hot'
 }
 
+/** @deprecated Use getLightStateCustom with explicit thresholds instead. */
 export const getLightState = (median: number): 'dark' | 'ok' | 'bright' => {
-    if (median < 200) {
+    if (median < DEFAULT_THRESHOLDS.light_min) {
         return 'dark'
     }
 
-    if (median <= 800) {
+    if (median <= DEFAULT_THRESHOLDS.light_max) {
         return 'ok'
     }
 

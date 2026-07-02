@@ -62,6 +62,7 @@ export default defineSchema({
     consecutive_critical_days: v.optional(v.number()),
     last_critical_date: v.optional(v.string()),
     moisture_threshold: v.optional(v.number()),
+    moisture_warning_threshold: v.optional(v.number()),
     temperature_threshold_min: v.optional(v.number()),
     temperature_threshold_max: v.optional(v.number()),
     light_threshold_min: v.optional(v.number()),
@@ -94,7 +95,7 @@ export default defineSchema({
     light_level_median: v.number(),
     moisture_state: v.union(
       v.literal("critical"),
-      v.literal("low"),
+      v.literal("warning"),
       v.literal("ok"),
     ),
     temperature_state: v.union(

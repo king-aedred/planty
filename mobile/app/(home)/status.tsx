@@ -21,7 +21,7 @@ import { CartesianChart, Line, useChartPressState } from 'victory-native'
 import { runOnJS, useAnimatedReaction } from 'react-native-reanimated'
 
 const colors = Colors.dark
-type SummaryState = 'ok' | 'low' | 'critical' | 'cold' | 'hot' | 'dark' | 'bright'
+type SummaryState = 'ok' | 'warning' | 'critical' | 'cold' | 'hot' | 'dark' | 'bright'
 type MetricKey = 'moisture' | 'temperature' | 'light'
 type PeriodPreset = '7' | '14' | 'custom'
 type SensorStatusState = 'active' | 'inactive' | 'offline' | 'needs_remeasurement' | 'unknown'

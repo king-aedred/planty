@@ -69,7 +69,7 @@ const getMoistureState = (value: number): 'critical' | 'warning' | 'ok' => {
     return 'critical'
   }
 
-  if (value <= 40) {
+  if (value < 35) {
     return 'warning'
   }
 
@@ -81,15 +81,15 @@ const getTemperatureState = (value: number): 'critical' | 'warning' | 'ok' => {
     return 'warning'
   }
 
-  if (value <= 28) {
-    return 'ok'
+  if (value > 30) {
+    return 'warning'
   }
 
-  return 'warning'
+  return 'ok'
 }
 
 const getLightState = (value: number): 'critical' | 'warning' | 'ok' => {
-  if (value < 200) {
+  if (value < 150) {
     return 'warning'
   }
 

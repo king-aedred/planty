@@ -114,7 +114,7 @@ export const createDailySummary = mutation({
     light_level_median: v.number(),
     moisture_state: v.union(
       v.literal("critical"),
-      v.literal("low"),
+      v.literal("warning"),
       v.literal("ok"),
     ),
     temperature_state: v.union(
@@ -156,7 +156,7 @@ export const createDailySummaryDirect = mutation({
     light_level_median: v.number(),
     moisture_state: v.union(
       v.literal("critical"),
-      v.literal("low"),
+      v.literal("warning"),
       v.literal("ok"),
     ),
     temperature_state: v.union(

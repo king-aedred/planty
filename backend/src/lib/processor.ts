@@ -1,10 +1,11 @@
 import { convex } from './convex.js'
 import { MIN_READINGS_REQUIRED, N8N_WEBHOOK_URL } from '../config.js'
 import {
+    DEFAULT_THRESHOLDS,
     calculateMedian,
-    getLightState,
-    getMoistureState,
-    getTemperatureState,
+    getLightStateCustom,
+    getMoistureStateCustom,
+    getTemperatureStateCustom,
 } from './analysis.js'
 
 const convexApiPromise = import('../../../convex/_generated/api.js')
@@ -15,7 +16,7 @@ export type ProcessSessionSummary = {
     moisture_median: number
     temperature_median: number
     light_level_median: number
-    moisture_state: 'critical' | 'low' | 'ok'
+    moisture_state: 'critical' | 'warning' | 'ok'
     temperature_state: 'cold' | 'ok' | 'hot'
     light_state: 'dark' | 'ok' | 'bright'
     created_at: number
@@ -324,6 +325,16 @@ export const processSessionIfReady = async (
     const moistureValues = readings.map((reading) => reading.moisture)
     const temperatureValues = readings.map((reading) => reading.temperature)
     const lightValues = readings.map((reading) => reading.light_level)
+    const plantThresholds = (await convex.query(api.plants.getPlantThresholds, {
+        device_id: sensor_id,
+    })) as {
+        moisture_critical: number
+        moisture_warning: number
+        temperature_min: number
+        temperature_max: number
+        light_min: number
+        light_max: number
+    }
 
     const moistureMedian = calculateMedian(moistureValues)
     const temperatureMedian = calculateMedian(temperatureValues)
@@ -335,9 +346,21 @@ export const processSessionIfReady = async (
         moisture_median: moistureMedian,
         temperature_median: temperatureMedian,
         light_level_median: lightMedian,
-        moisture_state: getMoistureState(moistureMedian),
-        temperature_state: getTemperatureState(temperatureMedian),
-        light_state: getLightState(lightMedian),
+        moisture_state: getMoistureStateCustom(
+            moistureMedian,
+            plantThresholds.moisture_critical ?? DEFAULT_THRESHOLDS.moisture_critical,
+            plantThresholds.moisture_warning ?? DEFAULT_THRESHOLDS.moisture_warning,
+        ),
+        temperature_state: getTemperatureStateCustom(
+            temperatureMedian,
+            plantThresholds.temperature_min ?? DEFAULT_THRESHOLDS.temperature_min,
+            plantThresholds.temperature_max ?? DEFAULT_THRESHOLDS.temperature_max,
+        ),
+        light_state: getLightStateCustom(
+            lightMedian,
+            plantThresholds.light_min ?? DEFAULT_THRESHOLDS.light_min,
+            plantThresholds.light_max ?? DEFAULT_THRESHOLDS.light_max,
+        ),
         created_at: Date.now(),
     }
 

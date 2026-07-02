@@ -5,7 +5,12 @@ import { processSessionIfReady, sendSummaryNotifications } from '../lib/processo
 import { handleSensorProblem } from '../lib/sensorProblem.js'
 import { CRON_INTERVAL_MINUTES, MIN_READINGS_REQUIRED } from '../config.js'
 import { clerkAuthMiddleware } from '../lib/auth.js'
-import { getLightState, getMoistureState, getTemperatureState } from '../lib/analysis.js'
+import {
+  DEFAULT_THRESHOLDS,
+  getLightStateCustom,
+  getMoistureStateCustom,
+  getTemperatureStateCustom,
+} from '../lib/analysis.js'
 
 const convexApiPromise = import('../../../convex/_generated/api.js')
 
@@ -286,10 +291,26 @@ devModeRouter.post('/time-travel', async (c) => {
     date,
   })
 
+  const plantThresholds = await convex.query(api.plants.getPlantThresholds, {
+    device_id: deviceId,
+  })
+
   const summaryStates = {
-    moisture_state: getMoistureState(moistureMedian),
-    temperature_state: getTemperatureState(temperatureMedian),
-    light_state: getLightState(lightLevelMedian),
+    moisture_state: getMoistureStateCustom(
+      moistureMedian,
+      plantThresholds.moisture_critical ?? DEFAULT_THRESHOLDS.moisture_critical,
+      plantThresholds.moisture_warning ?? DEFAULT_THRESHOLDS.moisture_warning,
+    ),
+    temperature_state: getTemperatureStateCustom(
+      temperatureMedian,
+      plantThresholds.temperature_min ?? DEFAULT_THRESHOLDS.temperature_min,
+      plantThresholds.temperature_max ?? DEFAULT_THRESHOLDS.temperature_max,
+    ),
+    light_state: getLightStateCustom(
+      lightLevelMedian,
+      plantThresholds.light_min ?? DEFAULT_THRESHOLDS.light_min,
+      plantThresholds.light_max ?? DEFAULT_THRESHOLDS.light_max,
+    ),
   }
 
   const createdAt = buildTimestampFromDateAndHour(date, hour)
