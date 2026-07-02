@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { SENSOR_WEBHOOK_SECRET } from '../config.js'
 import { handleSensorProblem } from '../lib/sensorProblem.js'
 
 const sensorRouter = new Hono()
@@ -10,6 +11,12 @@ const isValidReason = (reason: unknown): reason is SensorProblemReason => {
 }
 
 sensorRouter.post('/problem', async (c) => {
+  const authHeader = c.req.header('Authorization')
+
+  if (!authHeader || authHeader !== `Bearer ${SENSOR_WEBHOOK_SECRET}`) {
+    return c.json({ error: 'Unauthorized' }, 401)
+  }
+
   const body: unknown = await c.req.json().catch(() => null)
 
   if (typeof body !== 'object' || body === null) {
