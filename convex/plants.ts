@@ -252,6 +252,28 @@ export const updatePlantSettings = mutation({
   },
 });
 
+export const updatePlantCharacter = mutation({
+  args: {
+    plant_id: v.id("plants"),
+    character: v.union(v.literal("happy"), v.literal("grumpy"), v.literal("neutral")),
+  },
+  handler: async (ctx: MutationCtx, args) => {
+    const plant = await ctx.db.get(args.plant_id);
+
+    if (!plant) {
+      return null;
+    }
+
+    await requireSelf(ctx, plant.clerk_id ?? "");
+
+    await ctx.db.patch(args.plant_id, {
+      character: args.character,
+    });
+
+    return args.plant_id;
+  },
+});
+
 export const removeSensorFromPlant = mutation({
   args: {
     plant_id: v.id("plants"),

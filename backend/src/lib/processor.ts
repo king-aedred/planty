@@ -2,7 +2,6 @@ import { convex } from './convex.js'
 import { MIN_READINGS_REQUIRED, N8N_WEBHOOK_URL } from '../config.js'
 import {
     calculateMedian,
-    getEscalationMessage,
     getLightState,
     getMoistureState,
     getTemperatureState,
@@ -38,6 +37,8 @@ type PlantLookup = {
     name: string
     clerk_id: string | null
     device_id?: string | null
+    consecutive_critical_days?: number | null
+    character?: 'happy' | 'grumpy' | 'neutral' | null
 }
 
 type UserLookup = {
@@ -56,6 +57,8 @@ type MessageState = 'ok' | 'warning' | 'critical'
 
 type MessageType = 'plant_message' | 'system_message'
 
+type PlantCharacter = 'happy' | 'grumpy' | 'neutral'
+
 const getMessageState = (summary: ProcessSessionSummary): MessageState => {
     if (summary.moisture_state === 'critical') {
         return 'critical'
@@ -70,14 +73,6 @@ const getMessageState = (summary: ProcessSessionSummary): MessageState => {
     }
 
     return 'ok'
-}
-
-const getStandardMessageText = (state: MessageState): string => {
-    if (state === 'warning') {
-        return 'Ich werde langsam durstig... 🥺'
-    }
-
-    return "Mir geht's super! 🌱 Alles im grünen Bereich."
 }
 
 const updateCriticalState = async (summary: ProcessSessionSummary, plant: PlantLookup): Promise<number | null> => {
@@ -122,7 +117,8 @@ type N8nNotificationPayload = {
     plant_name: string
     type: MessageType
     state: MessageState
-    message: string
+    consecutive_critical_days: number | null
+    character: PlantCharacter
     notification_rules: {
         ok: string[]
         warning: string[]
@@ -168,15 +164,17 @@ const createInboxMessage = async (
     const user = await getPlantMessageWindowState(plant.clerk_id)
 
     const messageState = getMessageState(summary)
+    const plantCharacter: PlantCharacter = plant.character ?? 'neutral'
 
     if (messageState === 'critical' && criticalDays === null) {
-        throw new Error('[processor] Missing critical day count for escalation message')
+        throw new Error('[processor] Missing critical day count for escalation payload')
     }
 
-    const messageText =
-        messageState === 'critical'
-            ? getEscalationMessage(criticalDays)
-            : getStandardMessageText(messageState)
+    const messageContext = {
+        state: messageState,
+        consecutive_critical_days: criticalDays,
+        character: plantCharacter,
+    }
 
     const contactWindowStart = user?.contact_window_start
     const contactWindowEnd = user?.contact_window_end
@@ -201,7 +199,7 @@ const createInboxMessage = async (
         plant_name: plant.name,
         type,
         state: messageState,
-        text: messageText,
+        text: JSON.stringify(messageContext),
     })
 
     return {
@@ -210,7 +208,8 @@ const createInboxMessage = async (
         plant_name: plant.name,
         type,
         state: messageState,
-        message: messageText,
+        consecutive_critical_days: criticalDays,
+        character: plantCharacter,
         notification_rules: {
             ok: [],
             warning: [],

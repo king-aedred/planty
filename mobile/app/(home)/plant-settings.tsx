@@ -20,6 +20,42 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 const colors = Colors.dark
 
+type PlantCharacter = 'happy' | 'grumpy' | 'neutral'
+
+const characterOptions: Array<{
+  value: PlantCharacter
+  label: string
+  emoji: string
+  backgroundColor: string
+  borderColor: string
+  textColor: string
+}> = [
+  {
+    value: 'happy',
+    label: 'Fröhlich',
+    emoji: '😊',
+    backgroundColor: colors.success,
+    borderColor: colors.success,
+    textColor: colors.successText,
+  },
+  {
+    value: 'grumpy',
+    label: 'Genervt',
+    emoji: '😤',
+    backgroundColor: colors.warning,
+    borderColor: colors.warning,
+    textColor: colors.warningText,
+  },
+  {
+    value: 'neutral',
+    label: 'Neutral',
+    emoji: '😐',
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+    textColor: colors.accentText,
+  },
+]
+
 type ThresholdConfig = {
   key: 'moisture_threshold' | 'temperature_threshold_min' | 'temperature_threshold_max' | 'light_threshold_min' | 'light_threshold_max'
   label: string
@@ -47,8 +83,10 @@ export default function PlantSettingsScreen() {
   const clerkId = user?.id ?? ''
   const plants = useQuery(api.plants.getAllPlantsByClerkId, clerkId ? { clerk_id: clerkId } : 'skip')
   const updatePlantSettings = useMutation(api.plants.updatePlantSettings)
+  const updatePlantCharacter = useMutation(api.plants.updatePlantCharacter)
 
   const [name, setName] = useState('')
+  const [selectedCharacter, setSelectedCharacter] = useState<PlantCharacter>('neutral')
   const [values, setValues] = useState<Record<ThresholdConfig['key'], string>>({
     moisture_threshold: '30',
     temperature_threshold_min: '15',
@@ -57,6 +95,7 @@ export default function PlantSettingsScreen() {
     light_threshold_max: '800',
   })
   const [isSaving, setIsSaving] = useState(false)
+  const [isCharacterSaving, setIsCharacterSaving] = useState(false)
 
   const plant = useMemo(() => {
     const plantId = typeof params.plant_id === 'string' ? params.plant_id : ''
@@ -70,6 +109,7 @@ export default function PlantSettingsScreen() {
     }
 
     setName(plant.name)
+    setSelectedCharacter(plant.character ?? 'neutral')
     setValues({
       moisture_threshold: String(plant.moisture_threshold ?? 30),
       temperature_threshold_min: String(plant.temperature_threshold_min ?? 15),
@@ -111,6 +151,29 @@ export default function PlantSettingsScreen() {
     }
   }
 
+  const handleCharacterChange = async (nextCharacter: PlantCharacter) => {
+    if (!plant || nextCharacter === selectedCharacter || isCharacterSaving) {
+      return
+    }
+
+    const previousCharacter = selectedCharacter
+
+    setSelectedCharacter(nextCharacter)
+    setIsCharacterSaving(true)
+
+    try {
+      await updatePlantCharacter({
+        plant_id: plant._id,
+        character: nextCharacter,
+      })
+    } catch (error) {
+      setSelectedCharacter(previousCharacter)
+      Alert.alert('Fehler', error instanceof Error ? error.message : 'Persönlichkeit konnte nicht gespeichert werden')
+    } finally {
+      setIsCharacterSaving(false)
+    }
+  }
+
   if (!plant) {
     return (
       <SafeAreaView edges={['top']} style={styles.safeArea}>
@@ -144,6 +207,40 @@ export default function PlantSettingsScreen() {
 
               <Section title="Pflanze">
                 <Field label="Name ändern" value={name} onChangeText={setName} placeholder="Pflanzenname" autoCapitalize="words" />
+              </Section>
+
+              <Section title="Persönlichkeit">
+                <View style={styles.characterRow}>
+                  {characterOptions.map((option) => {
+                    const isActive = selectedCharacter === option.value
+
+                    return (
+                      <Pressable
+                        key={option.value}
+                        accessibilityRole="button"
+                        disabled={isCharacterSaving}
+                        onPress={() => void handleCharacterChange(option.value)}
+                        style={({ pressed }) => [
+                          styles.characterButton,
+                          {
+                            backgroundColor: isActive ? option.backgroundColor : colors.background,
+                            borderColor: isActive ? option.borderColor : colors.border,
+                          },
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.characterButtonText,
+                            { color: isActive ? option.textColor : colors.text },
+                          ]}
+                        >
+                          {option.emoji} {option.label}
+                        </Text>
+                      </Pressable>
+                    )
+                  })}
+                </View>
               </Section>
 
               <Section title="Schwellenwerte">
@@ -366,6 +463,25 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 13,
     fontWeight: '700',
+  },
+  characterRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  characterButton: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    minHeight: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 12,
+  },
+  characterButtonText: {
+    fontSize: 13,
+    fontWeight: '800',
+    textAlign: 'center',
   },
   input: {
     backgroundColor: colors.background,

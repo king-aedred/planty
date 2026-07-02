@@ -55,6 +55,9 @@ export default defineSchema({
     sensor_id: v.optional(v.string()),
     clerk_id: v.optional(v.string()),
     species_id: v.optional(v.string()),
+    character: v.optional(
+      v.union(v.literal("happy"), v.literal("grumpy"), v.literal("neutral")),
+    ),
     name: v.string(),
     consecutive_critical_days: v.optional(v.number()),
     last_critical_date: v.optional(v.string()),
