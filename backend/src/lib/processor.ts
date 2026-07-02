@@ -117,6 +117,7 @@ type N8nNotificationPayload = {
     plant_name: string
     type: MessageType
     state: MessageState
+    message_id: string
     consecutive_critical_days: number | null
     character: PlantCharacter
     notification_rules: {
@@ -170,12 +171,6 @@ const createInboxMessage = async (
         throw new Error('[processor] Missing critical day count for escalation payload')
     }
 
-    const messageContext = {
-        state: messageState,
-        consecutive_critical_days: criticalDays,
-        character: plantCharacter,
-    }
-
     const contactWindowStart = user?.contact_window_start
     const contactWindowEnd = user?.contact_window_end
 
@@ -193,14 +188,14 @@ const createInboxMessage = async (
         }
     }
 
-    await convex.mutation(api.messages.createMessage, {
+    const messageId = (await convex.mutation(api.messages.createMessage, {
         clerk_id: plant.clerk_id,
         device_id: summary.sensor_id,
         plant_name: plant.name,
         type,
         state: messageState,
-        text: JSON.stringify(messageContext),
-    })
+        text: '🌱 Nachricht wird generiert...',
+    })) as string
 
     return {
         clerk_id: plant.clerk_id,
@@ -208,6 +203,7 @@ const createInboxMessage = async (
         plant_name: plant.name,
         type,
         state: messageState,
+        message_id: messageId,
         consecutive_critical_days: criticalDays,
         character: plantCharacter,
         notification_rules: {

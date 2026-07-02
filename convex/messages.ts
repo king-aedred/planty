@@ -90,3 +90,24 @@ export const createMessage = mutation({
     });
   },
 });
+
+export const updateMessageText = mutation({
+  args: {
+    message_id: v.id("messages"),
+    text: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const message = await ctx.db.get(args.message_id);
+
+    if (!message) {
+      console.warn('[messages/updateMessageText] Message not found', args.message_id);
+      return null;
+    }
+
+    await ctx.db.patch(args.message_id, {
+      text: args.text,
+    });
+
+    return args.message_id;
+  },
+});

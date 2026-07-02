@@ -4,6 +4,7 @@ import { convex } from './lib/convex.js'
 import { CRON_SCHEDULE_ENABLED } from './config.js'
 import { startCronJob } from './jobs/cronJob.js'
 import devModeRouter from './routes/devmode.js'
+import notificationsRouter from './routes/notifications.js'
 import sensorRouter from './routes/sensor.js'
 import telegramRouter from './routes/telegram.js'
 
@@ -40,6 +41,7 @@ app.get('/api/status/:sensor_id/:date', async (c) => {
 })
 
 app.route('/dev', devModeRouter)
+app.route('/notifications', notificationsRouter)
 app.route('/sensor', sensorRouter)
 app.route('/telegram', telegramRouter)
 
