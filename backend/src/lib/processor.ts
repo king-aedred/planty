@@ -349,6 +349,10 @@ export const processSessionIfReady = async (
     const { created_at, ...summaryPayload } = summary
 
     await convex.mutation(api.readings.createDailySummary, summaryPayload)
+    await convex.mutation((api as any).sensors.setSensorStatus, {
+        device_id: sensor_id,
+        status: 'active',
+    })
     await sendSummaryNotifications(summary, 'plant_message', options)
 
     await convex.mutation(api.readings.deleteReadingsBySensorAndDate, {

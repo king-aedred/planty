@@ -80,6 +80,7 @@ export const MIN_READINGS_REQUIRED = parseNumberEnv(nodeProcess?.env.MIN_READING
 export const CRON_SCHEDULE_ENABLED = parseBooleanEnv(nodeProcess?.env.CRON_SCHEDULE_ENABLED, true)
 export const TELEGRAM_BOT_TOKEN = nodeProcess?.env.TELEGRAM_BOT_TOKEN
 export const N8N_WEBHOOK_URL = nodeProcess?.env.N8N_WEBHOOK_URL ?? 'http://localhost:5678/webhook/plant-critical'
+export const N8N_SYSTEM_WEBHOOK_URL = nodeProcess?.env.N8N_SYSTEM_WEBHOOK_URL ?? 'http://localhost:5678/webhook/system-alert'
 
 const convexUrl = nodeProcess?.env.CONVEX_URL
 const clerkSecretKey = nodeProcess?.env.CLERK_SECRET_KEY

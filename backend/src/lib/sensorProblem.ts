@@ -1,5 +1,5 @@
 import { convex } from './convex.js'
-import { N8N_WEBHOOK_URL } from '../config.js'
+import { N8N_SYSTEM_WEBHOOK_URL } from '../config.js'
 
 const convexApiPromise = import('../../../convex/_generated/api.js')
 
@@ -22,7 +22,7 @@ type UserLookup = {
   notification_rules?: NotificationRules | null
 }
 
-const SENSOR_PROBLEM_TEXT = '⚠️ Dein Sensor konnte sich nicht verbinden.\nBitte prüfe deine WLAN Verbindung.'
+const SENSOR_PROBLEM_TEXT = '⚠️ Dein Sensor konnte sich nicht verbinden. Bitte prüfe deine WLAN Verbindung.'
 
 const defaultNotificationRules = (): NotificationRules => ({
   ok: [],
@@ -40,7 +40,7 @@ const triggerN8nSensorProblem = async (payload: {
   expo_push_token: string | null
 }): Promise<void> => {
   try {
-    const response = await fetch(N8N_WEBHOOK_URL, {
+    const response = await fetch(N8N_SYSTEM_WEBHOOK_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
