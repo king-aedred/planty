@@ -54,6 +54,7 @@ export default defineSchema({
     device_id: v.optional(v.string()),
     sensor_id: v.optional(v.string()),
     clerk_id: v.optional(v.string()),
+    species_id: v.optional(v.string()),
     name: v.string(),
     consecutive_critical_days: v.optional(v.number()),
     last_critical_date: v.optional(v.string()),
@@ -67,6 +68,20 @@ export default defineSchema({
     .index("by_clerk_id", ["clerk_id"])
     .index("by_device_id", ["device_id"])
     .index("by_sensor_id", ["sensor_id"]),
+
+  plant_species: defineTable({
+    id: v.string(),
+    name: v.string(),
+    common_name: v.string(),
+    moisture_critical: v.number(),
+    moisture_warning: v.number(),
+    temperature_min: v.number(),
+    temperature_max: v.number(),
+    light_min: v.number(),
+    light_max: v.number(),
+  })
+    .index("by_species_id", ["id"])
+    .index("by_common_name", ["common_name"]),
 
   daily_summaries: defineTable({
     sensor_id: v.string(),

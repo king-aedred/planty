@@ -41,7 +41,7 @@ const METRIC_CONFIGS = {
   },
   temperature: {
     emoji: '🌡️',
-    label: 'Temperatur',
+    label: 'Lufttemperatur',
     unit: '°C',
     lineColor: '#FF9800',
     domain: [10, 35] as [number, number],
@@ -303,7 +303,7 @@ export default function StatusScreen() {
                       />
                       <MetricCard
                         emoji="🌡️"
-                        title="Temperatur"
+                        title="Lufttemperatur"
                         value={`${formatValue(latestSummary.temperature_median)} °C`}
                         badgeLabel={latestSummary.temperature_state}
                         badgeTone={temperatureTone(latestSummary.temperature_state)}

@@ -119,10 +119,22 @@ export const createPlant = mutation({
   args: {
     clerk_id: v.string(),
     device_id: v.optional(v.string()),
+    species_id: v.optional(v.string()),
     name: v.string(),
   },
   handler: async (ctx: MutationCtx, args) => {
     await requireSelf(ctx, args.clerk_id);
+
+    const species = args.species_id
+      ? await ctx.db
+          .query("plant_species")
+          .withIndex("by_species_id", (q) => q.eq("id", args.species_id ?? ""))
+          .first()
+      : null;
+
+    if (args.species_id && !species) {
+      throw new Error("Plant species not found");
+    }
 
     if (args.device_id) {
       const plants = (await ctx.db.query("plants").collect()) as Doc<"plants">[];
@@ -137,8 +149,18 @@ export const createPlant = mutation({
 
     return await ctx.db.insert("plants", {
       clerk_id: args.clerk_id,
+      species_id: args.species_id,
       name: args.name,
       created_at: Date.now(),
+      ...(species
+        ? {
+            moisture_threshold: species.moisture_warning,
+            temperature_threshold_min: species.temperature_min,
+            temperature_threshold_max: species.temperature_max,
+            light_threshold_min: species.light_min,
+            light_threshold_max: species.light_max,
+          }
+        : {}),
       ...(args.device_id
         ? {
             device_id: args.device_id,

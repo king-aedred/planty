@@ -1,7 +1,7 @@
 import { Colors } from '@/constants/colors'
 import { api } from '../../../convex/_generated/api'
 import BurgerMenu from '../../components/burger-menu'
-import { useMutation } from 'convex/react'
+import { useMutation, useQuery } from 'convex/react'
 import { useRouter } from 'expo-router'
 import { useState } from 'react'
 import {
@@ -29,13 +29,42 @@ export default function OnboardingScreen() {
   const createPlant = useMutation(api.plants.createPlant)
 
   const clerkId = user?.id ?? ''
-  const [plantName, setPlantName] = useState('')
+  const [speciesSearch, setSpeciesSearch] = useState('')
+  const [selectedSpecies, setSelectedSpecies] = useState<{
+    id: string
+    common_name: string
+    name: string
+  } | null>(null)
+  const [manualPlantName, setManualPlantName] = useState('')
+  const [isManualMode, setIsManualMode] = useState(false)
   const [deviceId, setDeviceId] = useState('fake-sensor-001')
   const [errorMessage, setErrorMessage] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const speciesResults = useQuery(api.plant_species.searchPlantSpecies, { search: speciesSearch }) ?? []
+
+  const handleSpeciesSearchChange = (value: string) => {
+    setSpeciesSearch(value)
+    setSelectedSpecies(null)
+    setIsManualMode(false)
+    setManualPlantName('')
+  }
+
+  const handleSelectSpecies = (species: { id: string; common_name: string; name: string }) => {
+    setSelectedSpecies(species)
+    setManualPlantName(species.common_name)
+    setErrorMessage('')
+    setIsManualMode(false)
+  }
+
+  const handleManualEntry = () => {
+    setSelectedSpecies(null)
+    setIsManualMode(true)
+    setManualPlantName('')
+    setErrorMessage('')
+  }
 
   const handleRegisterPlant = async () => {
-    const trimmedPlantName = plantName.trim()
+    const trimmedPlantName = selectedSpecies ? selectedSpecies.common_name.trim() : manualPlantName.trim()
     const trimmedDeviceId = deviceId.trim()
 
     if (!clerkId || !trimmedPlantName || !trimmedDeviceId || isSubmitting) {
@@ -47,7 +76,12 @@ export default function OnboardingScreen() {
 
     try {
       await registerSensor({ device_id: trimmedDeviceId })
-      await createPlant({ clerk_id: clerkId, device_id: trimmedDeviceId, name: trimmedPlantName })
+      await createPlant({
+        clerk_id: clerkId,
+        device_id: trimmedDeviceId,
+        species_id: selectedSpecies?.id,
+        name: trimmedPlantName,
+      })
       router.replace({ pathname: '/(home)/status', params: { device_id: trimmedDeviceId, name: trimmedPlantName } })
     } catch (error) {
       const message = error instanceof Error ? error.message : ''
@@ -76,22 +110,69 @@ export default function OnboardingScreen() {
               <View style={styles.hero}>
                 <Text style={styles.eyebrow}>Planty</Text>
                 <Text style={styles.title}>Deine erste Pflanze 🌱</Text>
-                <Text style={styles.subtitle}>Registriere eine Pflanze und verbinde sie direkt mit einem Sensor.</Text>
+                <Text style={styles.subtitle}>Suche eine Pflanze in der Datenbank oder gib sie manuell ein.</Text>
               </View>
 
               <View style={styles.form}>
                 <View style={styles.field}>
-                  <Text style={styles.label}>Pflanzenname</Text>
+                  <Text style={styles.label}>Pflanze suchen...</Text>
                   <TextInput
-                    value={plantName}
-                    onChangeText={setPlantName}
-                    placeholder="z. B. Monstera"
+                    value={speciesSearch}
+                    onChangeText={handleSpeciesSearchChange}
+                    placeholder="Pflanze suchen..."
                     placeholderTextColor={colors.muted}
                     style={styles.input}
                     autoCapitalize="words"
-                    returnKeyType="next"
+                    autoCorrect={false}
                   />
                 </View>
+
+                {selectedSpecies ? (
+                  <View style={styles.selectedSpeciesCard}>
+                    <View style={styles.selectedSpeciesTextBlock}>
+                      <Text style={styles.selectedSpeciesTitle}>{selectedSpecies.common_name}</Text>
+                      <Text style={styles.selectedSpeciesSubtitle}>{selectedSpecies.name}</Text>
+                    </View>
+                    <Text style={styles.selectedSpeciesCheck}>✓</Text>
+                  </View>
+                ) : (
+                  <View style={styles.speciesResults}>
+                    {speciesResults.map((species) => (
+                      <Pressable
+                        key={species.id}
+                        accessibilityRole="button"
+                        onPress={() => handleSelectSpecies(species)}
+                        style={({ pressed }) => [styles.speciesItem, pressed && styles.speciesItemPressed]}
+                      >
+                        <View style={styles.speciesItemTextBlock}>
+                          <Text style={styles.speciesItemTitle}>{species.common_name}</Text>
+                          <Text style={styles.speciesItemSubtitle}>{species.name}</Text>
+                        </View>
+                      </Pressable>
+                    ))}
+
+                    {speciesSearch.trim() && speciesResults.length === 0 ? (
+                      <Pressable accessibilityRole="button" onPress={handleManualEntry} style={styles.manualCta}>
+                        <Text style={styles.manualCtaText}>Nicht dabei? Namen manuell eingeben</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                )}
+
+                {isManualMode ? (
+                  <View style={styles.field}>
+                    <Text style={styles.label}>Pflanzenname</Text>
+                    <TextInput
+                      value={manualPlantName}
+                      onChangeText={setManualPlantName}
+                      placeholder="z. B. Monstera"
+                      placeholderTextColor={colors.muted}
+                      style={styles.input}
+                      autoCapitalize="words"
+                      returnKeyType="next"
+                    />
+                  </View>
+                ) : null}
 
                 <View style={styles.field}>
                   <Text style={styles.label}>Sensor ID</Text>
@@ -110,11 +191,11 @@ export default function OnboardingScreen() {
 
                 <Pressable
                   accessibilityRole="button"
-                  disabled={!plantName.trim() || !deviceId.trim() || isSubmitting}
+                  disabled={!(selectedSpecies || (isManualMode && manualPlantName.trim())) || !deviceId.trim() || isSubmitting}
                   style={({ pressed }) => [
                     styles.button,
                     (pressed || isSubmitting) && styles.buttonPressed,
-                    (!plantName.trim() || !deviceId.trim()) && styles.buttonDisabled,
+                    (!(selectedSpecies || (isManualMode && manualPlantName.trim())) || !deviceId.trim()) && styles.buttonDisabled,
                   ]}
                   onPress={handleRegisterPlant}
                 >
@@ -191,6 +272,72 @@ const styles = StyleSheet.create({
     fontSize: 16,
     paddingHorizontal: 16,
     paddingVertical: 14,
+  },
+  speciesResults: {
+    gap: 10,
+  },
+  speciesItem: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  speciesItemPressed: {
+    opacity: 0.88,
+  },
+  speciesItemTextBlock: {
+    gap: 2,
+  },
+  speciesItemTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  speciesItemSubtitle: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  selectedSpeciesCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.success,
+    borderWidth: 1,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  selectedSpeciesTextBlock: {
+    flex: 1,
+    gap: 2,
+  },
+  selectedSpeciesTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  selectedSpeciesSubtitle: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  selectedSpeciesCheck: {
+    color: colors.success,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  manualCta: {
+    paddingVertical: 2,
+  },
+  manualCtaText: {
+    color: colors.success,
+    fontSize: 13,
+    fontWeight: '700',
   },
   error: {
     color: colors.danger,
