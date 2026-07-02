@@ -21,8 +21,6 @@ export default function PlantListScreen() {
   const plants = useQuery(api.plants.getAllPlantsByClerkId, clerkId ? { clerk_id: clerkId } : 'skip')
   const unreadCount = useQuery(api.messages.getUnreadCount, clerkId ? { clerk_id: clerkId } : 'skip')
 
-  console.log('unreadCount:', unreadCount)
-
   const handleAddPlant = () => {
     router.push('/(home)/add-plant')
   }
