@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "2477761f-2eff-4671-ad01-1e4b5925124a"
+      }
+    },
+    "android": {
+      "package": "com.kingaedred.planty"
+    }
+  }
+}
