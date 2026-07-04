@@ -150,6 +150,9 @@ type N8nNotificationPayload = {
     consecutive_critical_days: number | null
     character: PlantCharacter
     is_thank_you: boolean
+    moisture_state: 'critical' | 'warning' | 'ok'
+    temperature_state: 'cold' | 'ok' | 'hot'
+    light_state: 'dark' | 'ok' | 'bright'
     notification_rules: {
         ok: string[]
         warning: string[]
@@ -269,6 +272,9 @@ const createInboxMessage = async (
         consecutive_critical_days: criticalDays,
         character: plantCharacter,
         is_thank_you: options.is_thank_you ?? false,
+        moisture_state: summary.moisture_state,
+        temperature_state: summary.temperature_state,
+        light_state: summary.light_state,
         notification_rules: {
             ok: [],
             warning: [],
