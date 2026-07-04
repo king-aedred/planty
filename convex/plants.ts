@@ -116,8 +116,15 @@ export const getPlantByDeviceId = query({
 export const getPlantsBySensorId = query({
   args: {
     sensor_id: v.string(),
+    backend_secret: v.string(),
   },
   handler: async (ctx, args) => {
+    const expectedSecret = process.env.BACKEND_SECRET
+
+    if (!expectedSecret || args.backend_secret !== expectedSecret) {
+      throw new Error("Unauthorized: invalid backend secret")
+    }
+
     const plants = (await ctx.db.query("plants").collect()) as Doc<"plants">[];
 
     return plants.filter((plant) => plant.device_id === args.sensor_id || plant.sensor_id === args.sensor_id);
@@ -191,9 +198,15 @@ export const createPlant = mutation({
 export const getPlantThresholds = query({
   args: {
     device_id: v.string(),
+    backend_secret: v.string(),
   },
   handler: async (ctx, args) => {
-    // Intentionally no auth check - called by backend processor only
+    const expectedSecret = process.env.BACKEND_SECRET
+
+    if (!expectedSecret || args.backend_secret !== expectedSecret) {
+      throw new Error("Unauthorized: invalid backend secret")
+    }
+
     const plants = (await ctx.db.query("plants").collect()) as Doc<"plants">[];
     const plant = plants.find((entry) => entry.device_id === args.device_id || entry.sensor_id === args.device_id);
 
@@ -216,8 +229,15 @@ export const incrementCriticalDays = mutation({
   args: {
     device_id: v.string(),
     date: v.string(),
+    backend_secret: v.string(),
   },
   handler: async (ctx: MutationCtx, args) => {
+    const expectedSecret = process.env.BACKEND_SECRET
+
+    if (!expectedSecret || args.backend_secret !== expectedSecret) {
+      throw new Error("Unauthorized: invalid backend secret")
+    }
+
     const plants = (await ctx.db.query("plants").collect()) as Doc<"plants">[];
     const plant = plants.find((entry) => entry.device_id === args.device_id || entry.sensor_id === args.device_id);
 
@@ -241,8 +261,15 @@ export const incrementCriticalDays = mutation({
 export const resetCriticalDays = mutation({
   args: {
     device_id: v.string(),
+    backend_secret: v.string(),
   },
   handler: async (ctx: MutationCtx, args) => {
+    const expectedSecret = process.env.BACKEND_SECRET
+
+    if (!expectedSecret || args.backend_secret !== expectedSecret) {
+      throw new Error("Unauthorized: invalid backend secret")
+    }
+
     const plants = (await ctx.db.query("plants").collect()) as Doc<"plants">[];
     const plant = plants.find((entry) => entry.device_id === args.device_id || entry.sensor_id === args.device_id);
 

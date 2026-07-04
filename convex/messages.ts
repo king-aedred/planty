@@ -76,8 +76,15 @@ export const createMessage = mutation({
     type: v.union(v.literal("plant_message"), v.literal("system_message")),
     state: v.union(v.literal("ok"), v.literal("warning"), v.literal("critical")),
     text: v.string(),
+    backend_secret: v.string(),
   },
   handler: async (ctx, args) => {
+    const expectedSecret = process.env.BACKEND_SECRET
+
+    if (!expectedSecret || args.backend_secret !== expectedSecret) {
+      throw new Error("Unauthorized: invalid backend secret")
+    }
+
     return await ctx.db.insert("messages", {
       clerk_id: args.clerk_id,
       device_id: args.device_id,
@@ -95,8 +102,15 @@ export const updateMessageText = mutation({
   args: {
     message_id: v.id("messages"),
     text: v.string(),
+    backend_secret: v.string(),
   },
   handler: async (ctx, args) => {
+    const expectedSecret = process.env.BACKEND_SECRET
+
+    if (!expectedSecret || args.backend_secret !== expectedSecret) {
+      throw new Error("Unauthorized: invalid backend secret")
+    }
+
     const message = await ctx.db.get(args.message_id);
 
     if (!message) {

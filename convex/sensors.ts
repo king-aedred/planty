@@ -158,9 +158,15 @@ export const registerSensor = mutation({
 export const updateLastSeen = mutation({
   args: {
     device_id: v.string(),
+    backend_secret: v.string(),
   },
   handler: async (ctx, args) => {
-    // Intentionally unauthenticated: this mutation is called by the public HTTP ingestion route.
+    const expectedSecret = process.env.BACKEND_SECRET
+
+    if (!expectedSecret || args.backend_secret !== expectedSecret) {
+      throw new Error("Unauthorized: invalid backend secret")
+    }
+
     const sensor = await ctx.db
       .query("sensors")
       .withIndex("by_device_id", (q) => q.eq("device_id", args.device_id))
@@ -180,9 +186,15 @@ export const setSensorStatus = mutation({
   args: {
     device_id: v.string(),
     status: sensorStatusValue,
+    backend_secret: v.string(),
   },
   handler: async (ctx, args) => {
-    // Intentionally unauthenticated: this mutation is called by the backend service.
+    const expectedSecret = process.env.BACKEND_SECRET
+
+    if (!expectedSecret || args.backend_secret !== expectedSecret) {
+      throw new Error("Unauthorized: invalid backend secret")
+    }
+
     const sensor = await ctx.db
       .query("sensors")
       .withIndex("by_device_id", (q) => q.eq("device_id", args.device_id))

@@ -1,6 +1,6 @@
 import cron from 'node-cron'
 import type { ScheduledTask } from 'node-cron'
-import { CRON_INTERVAL_MINUTES } from '../config.js'
+import { CONVEX_BACKEND_SECRET, CRON_INTERVAL_MINUTES } from '../config.js'
 import { convex } from '../lib/convex.js'
 import { processSessionIfReady } from '../lib/processor.js'
 
@@ -15,6 +15,7 @@ const getSensorIdsNeedingProcessing = async (date: string): Promise<string[]> =>
 
     return await convex.query(api.readings.getSensorsWithReadingsToday, {
         date,
+        backend_secret: CONVEX_BACKEND_SECRET,
     })
 }
 

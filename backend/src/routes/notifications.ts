@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { convex } from '../lib/convex.js'
-import { INTERNAL_WEBHOOK_SECRET } from '../config.js'
+import { CONVEX_BACKEND_SECRET, INTERNAL_WEBHOOK_SECRET } from '../config.js'
 
 const convexApiPromise = import('../../../convex/_generated/api.js')
 
@@ -38,6 +38,7 @@ notificationsRouter.post('/update-inbox', async (c) => {
   await convex.mutation(api.messages.updateMessageText, {
     message_id: messageId,
     text,
+    backend_secret: CONVEX_BACKEND_SECRET,
   })
 
   return c.json({ status: 'ok' })

@@ -1,5 +1,5 @@
 import { convex } from './convex.js'
-import { N8N_SYSTEM_WEBHOOK_URL } from '../config.js'
+import { CONVEX_BACKEND_SECRET, N8N_SYSTEM_WEBHOOK_URL } from '../config.js'
 
 const convexApiPromise = import('../../../convex/_generated/api.js')
 
@@ -76,6 +76,7 @@ export const handleSensorProblem = async (input: {
   const setStatusResult = (await convex.mutation((api as any).sensors.setSensorStatus, {
     device_id: input.device_id,
     status: 'needs_remeasurement',
+    backend_secret: CONVEX_BACKEND_SECRET,
   })) as { found: boolean }
 
   if (!setStatusResult.found) {
@@ -87,6 +88,7 @@ export const handleSensorProblem = async (input: {
 
   const plants = (await convex.query(api.plants.getPlantsBySensorId, {
     sensor_id: input.device_id,
+    backend_secret: CONVEX_BACKEND_SECRET,
   })) as PlantLookup[]
 
   if (plants.length === 0) {
@@ -123,6 +125,7 @@ export const handleSensorProblem = async (input: {
     type: 'system_message',
     state: 'warning',
     text: SENSOR_PROBLEM_TEXT,
+    backend_secret: CONVEX_BACKEND_SECRET,
   })
 
   await triggerN8nSensorProblem({

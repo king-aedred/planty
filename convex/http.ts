@@ -11,6 +11,7 @@ export const createReading = mutation({
         moisture: v.number(),
         temperature: v.number(),
         light_level: v.number(),
+        battery_voltage: v.optional(v.number()),
         timestamp: v.string(),
     },
     handler: async (ctx, args) => {
@@ -19,6 +20,7 @@ export const createReading = mutation({
             moisture: args.moisture,
             temperature: args.temperature,
             light_level: args.light_level,
+            battery_voltage: args.battery_voltage,
             timestamp: args.timestamp,
         })
 
@@ -41,6 +43,7 @@ function isReadingBody(
     moisture: number
     temperature: number
     light_level: number
+    battery_voltage?: number
     timestamp: string
 } {
   if (typeof value !== "object" || value === null) {
@@ -57,6 +60,7 @@ function isReadingBody(
     Number.isFinite(body.temperature) &&
     typeof body.light_level === "number" &&
     Number.isFinite(body.light_level) &&
+        (body.battery_voltage === undefined || (typeof body.battery_voltage === "number" && Number.isFinite(body.battery_voltage))) &&
     typeof body.timestamp === "string"
   )
 }
@@ -88,6 +92,7 @@ http.route({ //reagiert auf POSTs auf /readings
             const result = await ctx.runMutation(api.http.createReading, body)
             await ctx.runMutation(api.sensors.updateLastSeen, {
                 device_id: body.sensor_id,
+                backend_secret: process.env.BACKEND_SECRET ?? '',
             })
 
             return new Response(JSON.stringify(result), {

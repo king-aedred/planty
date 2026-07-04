@@ -45,6 +45,7 @@ export default defineSchema({
     moisture: v.number(),
     temperature: v.float64(),
     light_level: v.number(),
+    battery_voltage: v.optional(v.number()),
     timestamp: v.string(),
   })
     .index("by_sensor_and_date", ["sensor_id", "timestamp"])
@@ -93,6 +94,7 @@ export default defineSchema({
     moisture_median: v.number(),
     temperature_median: v.number(),
     light_level_median: v.number(),
+    battery_voltage_median: v.optional(v.number()),
     moisture_state: v.union(
       v.literal("critical"),
       v.literal("warning"),

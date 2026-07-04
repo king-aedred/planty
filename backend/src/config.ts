@@ -83,6 +83,7 @@ export const N8N_WEBHOOK_URL = nodeProcess?.env.N8N_WEBHOOK_URL ?? 'http://local
 export const N8N_SYSTEM_WEBHOOK_URL = nodeProcess?.env.N8N_SYSTEM_WEBHOOK_URL ?? 'http://localhost:5678/webhook/system-alert'
 export const INTERNAL_WEBHOOK_SECRET = nodeProcess?.env.INTERNAL_WEBHOOK_SECRET
 export const SENSOR_WEBHOOK_SECRET = nodeProcess?.env.SENSOR_WEBHOOK_SECRET ?? ''
+export const CONVEX_BACKEND_SECRET = nodeProcess?.env.CONVEX_BACKEND_SECRET
 
 const convexUrl = nodeProcess?.env.CONVEX_URL
 const clerkSecretKey = nodeProcess?.env.CLERK_SECRET_KEY
@@ -97,6 +98,10 @@ if (!clerkSecretKey) {
 
 if (!INTERNAL_WEBHOOK_SECRET) {
     throw new Error('INTERNAL_WEBHOOK_SECRET is missing')
+}
+
+if (!CONVEX_BACKEND_SECRET) {
+    throw new Error('CONVEX_BACKEND_SECRET is missing')
 }
 
 export const CONVEX_URL: string = convexUrl

@@ -3,7 +3,7 @@ import { convex } from '../lib/convex.js'
 import { createConvexClient } from '../lib/convex.js'
 import { processSessionIfReady, sendSummaryNotifications } from '../lib/processor.js'
 import { handleSensorProblem } from '../lib/sensorProblem.js'
-import { CRON_INTERVAL_MINUTES, MIN_READINGS_REQUIRED } from '../config.js'
+import { CONVEX_BACKEND_SECRET, CRON_INTERVAL_MINUTES, MIN_READINGS_REQUIRED } from '../config.js'
 import { clerkAuthMiddleware } from '../lib/auth.js'
 import {
   DEFAULT_THRESHOLDS,
@@ -197,6 +197,7 @@ devModeRouter.post('/simulate', async (c) => {
   const resetResult = await convex.mutation(api.readings.deleteDailySummaryBySensorAndDate, {
     sensor_id: deviceId,
     date,
+    backend_secret: CONVEX_BACKEND_SECRET,
   }) as { ok: true; deleted: boolean }
 
   const readings = buildScenarioReadings(deviceId, scenario, date)
@@ -208,6 +209,7 @@ devModeRouter.post('/simulate', async (c) => {
 
     await convex.mutation(api.sensors.updateLastSeen, {
       device_id: deviceId,
+      backend_secret: CONVEX_BACKEND_SECRET,
     })
   }
 
@@ -289,10 +291,12 @@ devModeRouter.post('/time-travel', async (c) => {
   const existingSummary = await convex.query(api.readings.getSummaryBySensorAndDate, {
     sensor_id: deviceId,
     date,
+    backend_secret: CONVEX_BACKEND_SECRET,
   })
 
   const plantThresholds = await convex.query(api.plants.getPlantThresholds, {
     device_id: deviceId,
+    backend_secret: CONVEX_BACKEND_SECRET,
   })
 
   const summaryStates = {
@@ -323,6 +327,7 @@ devModeRouter.post('/time-travel', async (c) => {
     light_level_median: lightLevelMedian,
     ...summaryStates,
     created_at: createdAt,
+    backend_secret: CONVEX_BACKEND_SECRET,
   })
 
   await sendSummaryNotifications({
@@ -362,6 +367,7 @@ devModeRouter.post('/trigger-cron', async (c) => {
   const date = getTodayDate()
   const sensorIds = await convex.query(api.readings.getSensorIdsWithReadingsToday, {
     date,
+    backend_secret: CONVEX_BACKEND_SECRET,
   })
 
   let resetSummaries = 0
@@ -370,6 +376,7 @@ devModeRouter.post('/trigger-cron', async (c) => {
     const resetResult = (await convex.mutation(api.readings.deleteDailySummaryBySensorAndDate, {
       sensor_id: sensorId,
       date,
+      backend_secret: CONVEX_BACKEND_SECRET,
     })) as { ok: true; deleted: boolean }
 
     if (resetResult.deleted) {

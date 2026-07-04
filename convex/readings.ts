@@ -1,16 +1,23 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
-// Backend-only reads: the Hono server verifies the Clerk token before calling these queries.
-// They intentionally remain unauthenticated because backend ConvexHttpClient calls do not
-// automatically carry a user identity, but the backend route itself is protected.
+const requireBackendSecret = (backendSecret: string) => {
+  const expectedSecret = process.env.BACKEND_SECRET
+
+  if (!expectedSecret || backendSecret !== expectedSecret) {
+    throw new Error("Unauthorized: invalid backend secret")
+  }
+}
 
 export const getReadingsBySensorAndDate = query({
   args: {
     sensor_id: v.string(),
     date: v.string(),
+    backend_secret: v.string(),
   },
   handler: async (ctx, args) => {
+    requireBackendSecret(args.backend_secret)
+
     const readings = await ctx.db
       .query("readings")
       .withIndex("by_sensor_and_date", (q) =>
@@ -28,8 +35,11 @@ export const getReadingsBySensorAndDate = query({
 export const getSensorsWithReadingsToday = query({
   args: {
     date: v.string(),
+    backend_secret: v.string(),
   },
   handler: async (ctx, args) => {
+    requireBackendSecret(args.backend_secret)
+
     const readings = await ctx.db
       .query("readings")
       .withIndex("by_timestamp", (q) =>
@@ -67,8 +77,11 @@ export const getSensorsWithReadingsToday = query({
 export const getSensorIdsWithReadingsToday = query({
   args: {
     date: v.string(),
+    backend_secret: v.string(),
   },
   handler: async (ctx, args) => {
+    requireBackendSecret(args.backend_secret)
+
     const readings = await ctx.db
       .query("readings")
       .withIndex("by_timestamp", (q) =>
@@ -92,8 +105,11 @@ export const getSummaryBySensorAndDate = query({
   args: {
     sensor_id: v.string(),
     date: v.string(),
+    backend_secret: v.string(),
   },
   handler: async (ctx, args) => {
+    requireBackendSecret(args.backend_secret)
+
     const summary = await ctx.db
       .query("daily_summaries")
       .withIndex("by_sensor_and_date", (q) =>
@@ -112,6 +128,7 @@ export const createDailySummary = mutation({
     moisture_median: v.number(),
     temperature_median: v.number(),
     light_level_median: v.number(),
+    battery_voltage_median: v.optional(v.number()),
     moisture_state: v.union(
       v.literal("critical"),
       v.literal("warning"),
@@ -127,8 +144,11 @@ export const createDailySummary = mutation({
       v.literal("ok"),
       v.literal("bright"),
     ),
+    backend_secret: v.string(),
   },
   handler: async (ctx, args) => {
+    requireBackendSecret(args.backend_secret)
+
     const createdAt = Date.now()
 
     const id = await ctx.db.insert("daily_summaries", {
@@ -137,6 +157,9 @@ export const createDailySummary = mutation({
       moisture_median: args.moisture_median,
       temperature_median: args.temperature_median,
       light_level_median: args.light_level_median,
+      ...(args.battery_voltage_median === undefined
+        ? {}
+        : { battery_voltage_median: args.battery_voltage_median }),
       moisture_state: args.moisture_state,
       temperature_state: args.temperature_state,
       light_state: args.light_state,
@@ -170,8 +193,11 @@ export const createDailySummaryDirect = mutation({
       v.literal("bright"),
     ),
     created_at: v.number(),
+    backend_secret: v.string(),
   },
   handler: async (ctx, args) => {
+    requireBackendSecret(args.backend_secret)
+
     const existingSummary = await ctx.db
       .query("daily_summaries")
       .withIndex("by_sensor_and_date", (q) =>
@@ -203,8 +229,11 @@ export const deleteDailySummaryBySensorAndDate = mutation({
   args: {
     sensor_id: v.string(),
     date: v.string(),
+    backend_secret: v.string(),
   },
   handler: async (ctx, args) => {
+    requireBackendSecret(args.backend_secret)
+
     const summary = await ctx.db
       .query("daily_summaries")
       .withIndex("by_sensor_and_date", (q) =>
@@ -226,8 +255,11 @@ export const deleteReadingsBySensorAndDate = mutation({
   args: {
     sensor_id: v.string(),
     date: v.string(),
+    backend_secret: v.string(),
   },
   handler: async (ctx, args) => {
+    requireBackendSecret(args.backend_secret)
+
     const readings = await ctx.db
       .query("readings")
       .withIndex("by_sensor_and_date", (q) =>

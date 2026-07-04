@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { serve } from '@hono/node-server'
 import { convex } from './lib/convex.js'
-import { CRON_SCHEDULE_ENABLED } from './config.js'
+import { CONVEX_BACKEND_SECRET, CRON_SCHEDULE_ENABLED } from './config.js'
 import { startCronJob } from './jobs/cronJob.js'
 import devModeRouter from './routes/devmode.js'
 import notificationsRouter from './routes/notifications.js'
@@ -31,6 +31,7 @@ app.get('/api/status/:sensor_id/:date', async (c) => {
     const summary = await convex.query(api.readings.getSummaryBySensorAndDate, {
         sensor_id: sensorId,
         date,
+        backend_secret: CONVEX_BACKEND_SECRET,
     })
 
     if (!summary) {
