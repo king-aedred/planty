@@ -3,6 +3,7 @@ import { convex } from '../lib/convex.js'
 import { createConvexClient } from '../lib/convex.js'
 import { processSessionIfReady, sendSummaryNotifications } from '../lib/processor.js'
 import { handleSensorProblem } from '../lib/sensorProblem.js'
+import type { Id } from '../../../convex/_generated/dataModel.js'
 import { CONVEX_BACKEND_SECRET, CRON_INTERVAL_MINUTES, MIN_READINGS_REQUIRED } from '../config.js'
 import { clerkAuthMiddleware } from '../lib/auth.js'
 import {
@@ -33,6 +34,7 @@ type SensorReading = {
   temperature: number
   light_level: number
   timestamp: string
+  session_id?: string
 }
 
 const getTodayDate = (): string => new Date().toISOString().slice(0, 10)
@@ -200,12 +202,31 @@ devModeRouter.post('/simulate', async (c) => {
     backend_secret: CONVEX_BACKEND_SECRET,
   }) as { ok: true; deleted: boolean }
 
+  if (scenario === 'offline') {
+    return c.json({ status: 'no_data', inserted: 0 })
+  }
+
+  const session = (await convex.mutation(api.readings.getOrCreateSession, {
+    sensor_id: deviceId,
+    date,
+    backend_secret: CONVEX_BACKEND_SECRET,
+  })) as { _id: string }
+  const sessionId = session._id as Id<"sensor_sessions">
+
   const readings = buildScenarioReadings(deviceId, scenario, date)
   const insertedIds: string[] = []
 
   for (const reading of readings) {
-    const result = (await convex.mutation(api.http.createReading, reading)) as { ok: true; id: string }
+    const result = (await convex.mutation(api.http.createReading, {
+      ...reading,
+      session_id: sessionId,
+    })) as { ok: true; id: string }
     insertedIds.push(result.id)
+
+    await convex.mutation(api.readings.incrementSessionReadings, {
+      session_id: sessionId,
+      backend_secret: CONVEX_BACKEND_SECRET,
+    })
 
     await convex.mutation(api.sensors.updateLastSeen, {
       device_id: deviceId,
@@ -213,16 +234,12 @@ devModeRouter.post('/simulate', async (c) => {
     })
   }
 
-  if (scenario === 'offline') {
-    return c.json({ status: 'no_data', inserted: 0 })
-  }
-
-  const processResult = await processSessionIfReady(deviceId, date, {
+  const processResult = await processSessionIfReady(sessionId, {
     override_contact_window: overrideContactWindow,
   })
 
   if (scenario === 'duplicate') {
-    const duplicateResult = await processSessionIfReady(deviceId, date, {
+    const duplicateResult = await processSessionIfReady(sessionId, {
       override_contact_window: overrideContactWindow,
     })
 
@@ -387,7 +404,18 @@ devModeRouter.post('/trigger-cron', async (c) => {
   const result = []
 
   for (const sensorId of sensorIds) {
-    const processingResult = await processSessionIfReady(sensorId, date)
+    const session = (await convex.query(api.readings.getSession, {
+      sensor_id: sensorId,
+      date,
+    })) as { _id: string } | null
+
+    if (!session) {
+      console.log(`[dev/trigger-cron] sensor_id=${sensorId} date=${date}`, 'no session')
+      result.push({ sensor_id: sensorId, result: { status: 'insufficient_data' as const } })
+      continue
+    }
+
+    const processingResult = await processSessionIfReady(session._id)
     console.log(`[dev/trigger-cron] sensor_id=${sensorId} date=${date}`, processingResult)
     result.push({ sensor_id: sensorId, result: processingResult })
   }

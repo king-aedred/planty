@@ -46,24 +46,28 @@ app.post('/process-session', async (c) => {
     }
 
     const payload = body as Record<string, unknown>
+    const sessionId = typeof payload.session_id === 'string' ? payload.session_id.trim() : ''
     const sensorId = typeof payload.sensor_id === 'string' ? payload.sensor_id.trim() : ''
-    const date = typeof payload.date === 'string' ? payload.date.trim() : ''
     const reason = payload.reason
 
-    if (!sensorId || !date || (reason !== 'complete' && reason !== 'partial_12')) {
-        return c.json({ error: 'sensor_id, date and reason are required' }, 400)
+    if (!sessionId || !sensorId || (reason !== 'complete' && reason !== 'partial_12')) {
+        return c.json({ error: 'session_id, sensor_id and reason are required' }, 400)
     }
 
-    const existingSession = await convex.query(anyApi.readings.getSession, {
-        sensor_id: sensorId,
-        date,
+    const existingSession = await convex.query(anyApi.readings.getSessionById, {
+        session_id: sessionId,
+        backend_secret: CONVEX_BACKEND_SECRET,
     })
+
+    if (!existingSession) {
+        return c.json({ error: 'session not found' }, 404)
+    }
 
     if (existingSession?.status === 'processed') {
         return c.json({ status: 'already_processed' })
     }
 
-    const result = await processSessionIfReady(sensorId, date, true)
+    const result = await processSessionIfReady(sessionId, true)
 
     if (result.status === 'already_processed') {
         return c.json({ status: 'already_processed' })

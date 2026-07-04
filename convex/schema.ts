@@ -50,16 +50,18 @@ export default defineSchema({
       v.literal("processed"),
       v.literal("failed"),
     ),
-  }).index("by_sensor_and_date", ["sensor_id", "date"]),
+  }).index("by_sensor_and_started_at", ["sensor_id", "started_at"]),
 
   readings: defineTable({
     sensor_id: v.string(),
+    session_id: v.optional(v.string()),
     moisture: v.number(),
     temperature: v.float64(),
     light_level: v.number(),
     battery_voltage: v.optional(v.number()),
     timestamp: v.string(),
   })
+    .index("by_session_id", ["session_id"])
     .index("by_sensor_and_date", ["sensor_id", "timestamp"])
     .index("by_timestamp", ["timestamp"]),
 

@@ -35,6 +35,12 @@ type Reading = {
     battery_voltage?: number
 }
 
+type SessionLookup = {
+    _id: string
+    sensor_id: string
+    date: string
+}
+
 type PlantLookup = {
     _id: string
     name: string
@@ -311,8 +317,7 @@ const notifyN8nIfNeeded = async (payload: N8nNotificationPayload, options: Notif
 }
 
 export const processSessionIfReady = async (
-    sensor_id: string,
-    date: string,
+    session_id: string,
     optionsOrForce: NotificationOptions | boolean = {},
     maybeForce = false,
 ): Promise<ProcessSessionResult> => {
@@ -320,9 +325,17 @@ export const processSessionIfReady = async (
     const options = typeof optionsOrForce === 'boolean' ? {} : optionsOrForce
     const api = anyApi
 
-    const readings = (await convex.query(api.readings.getReadingsBySensorAndDate, {
-        sensor_id,
-        date,
+    const session = (await convex.query(api.readings.getSessionById, {
+        session_id,
+        backend_secret: CONVEX_BACKEND_SECRET,
+    })) as SessionLookup | null
+
+    if (!session) {
+        throw new Error(`[processor] Session not found: ${session_id}`)
+    }
+
+    const readings = (await convex.query(api.readings.getReadingsBySessionId, {
+        session_id,
         backend_secret: CONVEX_BACKEND_SECRET,
     })) as Reading[]
 
@@ -331,8 +344,8 @@ export const processSessionIfReady = async (
     }
 
     const existingSummary = await convex.query(api.readings.getSummaryBySensorAndDate, {
-        sensor_id,
-        date,
+        sensor_id: session.sensor_id,
+        date: session.date,
         backend_secret: CONVEX_BACKEND_SECRET,
     })
 
@@ -347,7 +360,7 @@ export const processSessionIfReady = async (
         .map((reading) => reading.battery_voltage)
         .filter((batteryVoltage): batteryVoltage is number => typeof batteryVoltage === 'number')
     const plantThresholds = (await convex.query(api.plants.getPlantThresholds, {
-        device_id: sensor_id,
+        device_id: session.sensor_id,
         backend_secret: CONVEX_BACKEND_SECRET,
     })) as {
         moisture_critical: number
@@ -364,8 +377,8 @@ export const processSessionIfReady = async (
     const batteryVoltageMedian = batteryVoltageValues.length > 0 ? calculateMedian(batteryVoltageValues) : null
 
     const summary: ProcessSessionSummary = {
-        sensor_id,
-        date,
+        sensor_id: session.sensor_id,
+        date: session.date,
         moisture_median: moistureMedian,
         temperature_median: temperatureMedian,
         light_level_median: lightMedian,
@@ -396,20 +409,18 @@ export const processSessionIfReady = async (
         backend_secret: CONVEX_BACKEND_SECRET,
     })
     await convex.mutation((api as any).sensors.setSensorStatus, {
-        device_id: sensor_id,
+        device_id: session.sensor_id,
         status: 'active',
         backend_secret: CONVEX_BACKEND_SECRET,
     })
     await sendSummaryNotifications(summary, 'plant_message', options)
 
-    await convex.mutation(api.readings.deleteReadingsBySensorAndDate, {
-        sensor_id,
-        date,
+    await convex.mutation(api.readings.deleteReadingsBySessionId, {
+        session_id,
         backend_secret: CONVEX_BACKEND_SECRET,
     })
     await convex.mutation(api.readings.markSessionProcessed, {
-        sensor_id,
-        date,
+        session_id,
         backend_secret: CONVEX_BACKEND_SECRET,
     })
 

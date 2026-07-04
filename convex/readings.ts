@@ -2,6 +2,8 @@ import { internalAction, mutation, query } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { v } from "convex/values";
 
+const RECENT_SESSION_WINDOW_MS = 15 * 60 * 1000
+
 const requireBackendSecret = (backendSecret: string) => {
   const expectedSecret = process.env.BACKEND_SECRET
 
@@ -33,6 +35,21 @@ export const getReadingsBySensorAndDate = query({
   },
 })
 
+export const getReadingsBySessionId = query({
+  args: {
+    session_id: v.id("sensor_sessions"),
+    backend_secret: v.string(),
+  },
+  handler: async (ctx, args) => {
+    requireBackendSecret(args.backend_secret)
+
+    return await ctx.db
+      .query("readings")
+      .withIndex("by_session_id", (q) => q.eq("session_id", args.session_id))
+      .collect()
+  },
+})
+
 export const getOrCreateSession = mutation({
   args: {
     sensor_id: v.string(),
@@ -42,12 +59,15 @@ export const getOrCreateSession = mutation({
   handler: async (ctx, args) => {
     requireBackendSecret(args.backend_secret)
 
-    const existingSession = await ctx.db
+    const recentSessions = await ctx.db
       .query("sensor_sessions")
-      .withIndex("by_sensor_and_date", (q) =>
-        q.eq("sensor_id", args.sensor_id).eq("date", args.date),
-      )
-      .first()
+      .withIndex("by_sensor_and_started_at", (q) => q.eq("sensor_id", args.sensor_id))
+      .collect()
+
+    const cutoff = Date.now() - RECENT_SESSION_WINDOW_MS
+    const existingSession = recentSessions
+      .filter((session) => session.status === "collecting" && session.started_at > cutoff)
+      .sort((left, right) => right.started_at - left.started_at)[0]
 
     if (existingSession) {
       return existingSession
@@ -69,30 +89,16 @@ export const getOrCreateSession = mutation({
 
 export const incrementSessionReadings = mutation({
   args: {
-    sensor_id: v.string(),
-    date: v.string(),
+    session_id: v.id("sensor_sessions"),
     backend_secret: v.string(),
   },
   handler: async (ctx, args) => {
     requireBackendSecret(args.backend_secret)
 
-    const session = await ctx.db
-      .query("sensor_sessions")
-      .withIndex("by_sensor_and_date", (q) =>
-        q.eq("sensor_id", args.sensor_id).eq("date", args.date),
-      )
-      .first()
+    const session = await ctx.db.get(args.session_id)
 
     if (!session) {
-      const id = await ctx.db.insert("sensor_sessions", {
-        sensor_id: args.sensor_id,
-        date: args.date,
-        started_at: Date.now(),
-        readings_count: 1,
-        status: "collecting",
-      })
-
-      return (await ctx.db.get(id))?.readings_count ?? 1
+      throw new Error("Session not found")
     }
 
     const newReadingsCount = session.readings_count + 1
@@ -111,30 +117,38 @@ export const getSession = query({
     date: v.string(),
   },
   handler: async (ctx, args) => {
-    return await ctx.db
+    const sessions = await ctx.db
       .query("sensor_sessions")
-      .withIndex("by_sensor_and_date", (q) =>
-        q.eq("sensor_id", args.sensor_id).eq("date", args.date),
-      )
-      .first()
+      .withIndex("by_sensor_and_started_at", (q) => q.eq("sensor_id", args.sensor_id))
+      .collect()
+
+    return sessions
+      .filter((session) => session.date === args.date)
+      .sort((left, right) => right.started_at - left.started_at)[0] ?? null
   },
 })
 
-export const markSessionProcessed = mutation({
+export const getSessionById = query({
   args: {
-    sensor_id: v.string(),
-    date: v.string(),
+    session_id: v.id("sensor_sessions"),
     backend_secret: v.string(),
   },
   handler: async (ctx, args) => {
     requireBackendSecret(args.backend_secret)
 
-    const session = await ctx.db
-      .query("sensor_sessions")
-      .withIndex("by_sensor_and_date", (q) =>
-        q.eq("sensor_id", args.sensor_id).eq("date", args.date),
-      )
-      .first()
+    return await ctx.db.get(args.session_id)
+  },
+})
+
+export const markSessionProcessed = mutation({
+  args: {
+    session_id: v.id("sensor_sessions"),
+    backend_secret: v.string(),
+  },
+  handler: async (ctx, args) => {
+    requireBackendSecret(args.backend_secret)
+
+    const session = await ctx.db.get(args.session_id)
 
     if (!session) {
       return null
@@ -153,19 +167,13 @@ export const markSessionProcessed = mutation({
 
 export const markSessionFailed = mutation({
   args: {
-    sensor_id: v.string(),
-    date: v.string(),
+    session_id: v.id("sensor_sessions"),
     backend_secret: v.string(),
   },
   handler: async (ctx, args) => {
     requireBackendSecret(args.backend_secret)
 
-    const session = await ctx.db
-      .query("sensor_sessions")
-      .withIndex("by_sensor_and_date", (q) =>
-        q.eq("sensor_id", args.sensor_id).eq("date", args.date),
-      )
-      .first()
+    const session = await ctx.db.get(args.session_id)
 
     if (!session) {
       return null
@@ -184,14 +192,13 @@ export const markSessionFailed = mutation({
 
 export const scheduleSessionCheck = internalAction({
   args: {
-    sensor_id: v.string(),
-    date: v.string(),
+    session_id: v.id("sensor_sessions"),
     check_type: v.union(v.literal("timeout_12"), v.literal("timeout_failed")),
   },
   handler: async (ctx, args) => {
-    const session = await ctx.runQuery(api.readings.getSession, {
-      sensor_id: args.sensor_id,
-      date: args.date,
+    const session = await ctx.runQuery(api.readings.getSessionById, {
+      session_id: args.session_id,
+      backend_secret: process.env.BACKEND_SECRET ?? "",
     })
 
     if (!session || session.status === "processed") {
@@ -216,8 +223,9 @@ export const scheduleSessionCheck = internalAction({
             Authorization: `Bearer ${internalWebhookSecret}`,
           },
           body: JSON.stringify({
-            sensor_id: args.sensor_id,
-            date: args.date,
+            session_id: args.session_id,
+            sensor_id: session.sensor_id,
+            date: session.date,
             reason: "partial_12",
           }),
         })
@@ -239,14 +247,13 @@ export const scheduleSessionCheck = internalAction({
             Authorization: `Bearer ${sensorWebhookSecret}`,
           },
           body: JSON.stringify({
-            device_id: args.sensor_id,
+            device_id: session.sensor_id,
             reason: "max_retries_exceeded",
           }),
         })
       } finally {
         await ctx.runMutation(api.readings.markSessionFailed, {
-          sensor_id: args.sensor_id,
-          date: args.date,
+          session_id: args.session_id,
           backend_secret: process.env.BACKEND_SECRET ?? "",
         })
       }
@@ -501,5 +508,26 @@ export const deleteReadingsBySensorAndDate = mutation({
     }
 
     return { ok: true, deleted: readingsToDelete.length }
+  },
+})
+
+export const deleteReadingsBySessionId = mutation({
+  args: {
+    session_id: v.id("sensor_sessions"),
+    backend_secret: v.string(),
+  },
+  handler: async (ctx, args) => {
+    requireBackendSecret(args.backend_secret)
+
+    const readings = await ctx.db
+      .query("readings")
+      .withIndex("by_session_id", (q) => q.eq("session_id", args.session_id))
+      .collect()
+
+    for (const reading of readings) {
+      await ctx.db.delete(reading._id)
+    }
+
+    return { ok: true, deleted: readings.length }
   },
 })

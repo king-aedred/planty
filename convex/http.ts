@@ -1,6 +1,7 @@
 import { httpRouter } from "convex/server";
 import { httpAction, mutation, query } from "./_generated/server";
 import { api, internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 
 const http = httpRouter()
@@ -8,6 +9,7 @@ const http = httpRouter()
 export const createReading = mutation({
     args: {
         sensor_id: v.string(),
+        session_id: v.optional(v.id("sensor_sessions")),
         moisture: v.number(),
         temperature: v.number(),
         light_level: v.number(),
@@ -17,6 +19,7 @@ export const createReading = mutation({
     handler: async (ctx, args) => {
         const id = await ctx.db.insert("readings", {
             sensor_id: args.sensor_id,
+            session_id: args.session_id,
             moisture: args.moisture,
             temperature: args.temperature,
             light_level: args.light_level,
@@ -89,7 +92,6 @@ http.route({ //reagiert auf POSTs auf /readings
                 )
             }
 
-            const result = await ctx.runMutation(api.http.createReading, body)
             const sensorDate = body.timestamp.substring(0, 10)
             const serverDate = new Date().toISOString().substring(0, 10)
 
@@ -100,15 +102,25 @@ http.route({ //reagiert auf POSTs auf /readings
                 })
             }
 
-            await ctx.runMutation(api.readings.getOrCreateSession, {
+            const session = await ctx.runMutation(api.readings.getOrCreateSession, {
                 sensor_id: body.sensor_id,
                 date: sensorDate,
                 backend_secret: process.env.BACKEND_SECRET ?? '',
+            }) as { _id: string } | null
+
+            if (!session) {
+                throw new Error('Failed to create or load session')
+            }
+
+            const sessionId = session._id as Id<"sensor_sessions">
+
+            const result = await ctx.runMutation(api.http.createReading, {
+                ...body,
+                session_id: sessionId,
             })
 
             const readingsCount = await ctx.runMutation(api.readings.incrementSessionReadings, {
-                sensor_id: body.sensor_id,
-                date: sensorDate,
+                session_id: sessionId,
                 backend_secret: process.env.BACKEND_SECRET ?? '',
             })
 
@@ -126,6 +138,7 @@ http.route({ //reagiert auf POSTs auf /readings
                         Authorization: `Bearer ${internalWebhookSecret}`,
                     },
                     body: JSON.stringify({
+                        session_id: sessionId,
                         sensor_id: body.sensor_id,
                         date: sensorDate,
                         reason: 'complete',
@@ -135,14 +148,12 @@ http.route({ //reagiert auf POSTs auf /readings
 
             if (readingsCount === 1) {
                 await ctx.scheduler.runAfter(4 * 60 * 1000, internal.readings.scheduleSessionCheck, {
-                    sensor_id: body.sensor_id,
-                    date: sensorDate,
+                    session_id: sessionId,
                     check_type: 'timeout_12',
                 })
 
                 await ctx.scheduler.runAfter(8 * 60 * 1000, internal.readings.scheduleSessionCheck, {
-                    sensor_id: body.sensor_id,
-                    date: sensorDate,
+                    session_id: sessionId,
                     check_type: 'timeout_failed',
                 })
             }
