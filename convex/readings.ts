@@ -1,4 +1,5 @@
-import { mutation, query } from "./_generated/server";
+import { internalAction, mutation, query } from "./_generated/server";
+import { api, internal } from "./_generated/api";
 import { v } from "convex/values";
 
 const requireBackendSecret = (backendSecret: string) => {
@@ -29,6 +30,227 @@ export const getReadingsBySensorAndDate = query({
       .collect()
 
     return readings.filter((reading) => reading.timestamp.startsWith(args.date))
+  },
+})
+
+export const getOrCreateSession = mutation({
+  args: {
+    sensor_id: v.string(),
+    date: v.string(),
+    backend_secret: v.string(),
+  },
+  handler: async (ctx, args) => {
+    requireBackendSecret(args.backend_secret)
+
+    const existingSession = await ctx.db
+      .query("sensor_sessions")
+      .withIndex("by_sensor_and_date", (q) =>
+        q.eq("sensor_id", args.sensor_id).eq("date", args.date),
+      )
+      .first()
+
+    if (existingSession) {
+      return existingSession
+    }
+
+    const startedAt = Date.now()
+
+    const id = await ctx.db.insert("sensor_sessions", {
+      sensor_id: args.sensor_id,
+      date: args.date,
+      started_at: startedAt,
+      readings_count: 0,
+      status: "collecting",
+    })
+
+    return await ctx.db.get(id)
+  },
+})
+
+export const incrementSessionReadings = mutation({
+  args: {
+    sensor_id: v.string(),
+    date: v.string(),
+    backend_secret: v.string(),
+  },
+  handler: async (ctx, args) => {
+    requireBackendSecret(args.backend_secret)
+
+    const session = await ctx.db
+      .query("sensor_sessions")
+      .withIndex("by_sensor_and_date", (q) =>
+        q.eq("sensor_id", args.sensor_id).eq("date", args.date),
+      )
+      .first()
+
+    if (!session) {
+      const id = await ctx.db.insert("sensor_sessions", {
+        sensor_id: args.sensor_id,
+        date: args.date,
+        started_at: Date.now(),
+        readings_count: 1,
+        status: "collecting",
+      })
+
+      return (await ctx.db.get(id))?.readings_count ?? 1
+    }
+
+    const newReadingsCount = session.readings_count + 1
+
+    await ctx.db.patch(session._id, {
+      readings_count: newReadingsCount,
+    })
+
+    return newReadingsCount
+  },
+})
+
+export const getSession = query({
+  args: {
+    sensor_id: v.string(),
+    date: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("sensor_sessions")
+      .withIndex("by_sensor_and_date", (q) =>
+        q.eq("sensor_id", args.sensor_id).eq("date", args.date),
+      )
+      .first()
+  },
+})
+
+export const markSessionProcessed = mutation({
+  args: {
+    sensor_id: v.string(),
+    date: v.string(),
+    backend_secret: v.string(),
+  },
+  handler: async (ctx, args) => {
+    requireBackendSecret(args.backend_secret)
+
+    const session = await ctx.db
+      .query("sensor_sessions")
+      .withIndex("by_sensor_and_date", (q) =>
+        q.eq("sensor_id", args.sensor_id).eq("date", args.date),
+      )
+      .first()
+
+    if (!session) {
+      return null
+    }
+
+    await ctx.db.patch(session._id, {
+      status: "processed",
+    })
+
+    return {
+      ...session,
+      status: "processed" as const,
+    }
+  },
+})
+
+export const markSessionFailed = mutation({
+  args: {
+    sensor_id: v.string(),
+    date: v.string(),
+    backend_secret: v.string(),
+  },
+  handler: async (ctx, args) => {
+    requireBackendSecret(args.backend_secret)
+
+    const session = await ctx.db
+      .query("sensor_sessions")
+      .withIndex("by_sensor_and_date", (q) =>
+        q.eq("sensor_id", args.sensor_id).eq("date", args.date),
+      )
+      .first()
+
+    if (!session) {
+      return null
+    }
+
+    await ctx.db.patch(session._id, {
+      status: "failed",
+    })
+
+    return {
+      ...session,
+      status: "failed" as const,
+    }
+  },
+})
+
+export const scheduleSessionCheck = internalAction({
+  args: {
+    sensor_id: v.string(),
+    date: v.string(),
+    check_type: v.union(v.literal("timeout_12"), v.literal("timeout_failed")),
+  },
+  handler: async (ctx, args) => {
+    const session = await ctx.runQuery(api.readings.getSession, {
+      sensor_id: args.sensor_id,
+      date: args.date,
+    })
+
+    if (!session || session.status === "processed") {
+      return
+    }
+
+    const backendProcessUrl = process.env.BACKEND_PROCESS_URL
+    const backendSensorProblemUrl = process.env.BACKEND_SENSOR_PROBLEM_URL
+    const internalWebhookSecret = process.env.INTERNAL_WEBHOOK_SECRET
+    const sensorWebhookSecret = process.env.SENSOR_WEBHOOK_SECRET
+
+    if (args.check_type === "timeout_12") {
+      if (session.readings_count >= 12) {
+        if (!backendProcessUrl || !internalWebhookSecret) {
+          throw new Error("Missing backend process webhook configuration")
+        }
+
+        await fetch(backendProcessUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${internalWebhookSecret}`,
+          },
+          body: JSON.stringify({
+            sensor_id: args.sensor_id,
+            date: args.date,
+            reason: "partial_12",
+          }),
+        })
+      }
+
+      return
+    }
+
+    if (session.readings_count < 12) {
+      if (!backendSensorProblemUrl || !sensorWebhookSecret) {
+        throw new Error("Missing sensor problem webhook configuration")
+      }
+
+      try {
+        await fetch(backendSensorProblemUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${sensorWebhookSecret}`,
+          },
+          body: JSON.stringify({
+            device_id: args.sensor_id,
+            reason: "max_retries_exceeded",
+          }),
+        })
+      } finally {
+        await ctx.runMutation(api.readings.markSessionFailed, {
+          sensor_id: args.sensor_id,
+          date: args.date,
+          backend_secret: process.env.BACKEND_SECRET ?? "",
+        })
+      }
+    }
   },
 })
 

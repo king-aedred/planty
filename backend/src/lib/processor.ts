@@ -1,5 +1,6 @@
 import { convex } from './convex.js'
 import { CONVEX_BACKEND_SECRET, MIN_READINGS_REQUIRED, N8N_WEBHOOK_URL } from '../config.js'
+import { anyApi } from 'convex/server'
 import {
     DEFAULT_THRESHOLDS,
     calculateMedian,
@@ -8,7 +9,6 @@ import {
     getTemperatureStateCustom,
 } from './analysis.js'
 
-const convexApiPromise = import('../../../convex/_generated/api.js')
 
 export type ProcessSessionSummary = {
     sensor_id: string
@@ -16,7 +16,7 @@ export type ProcessSessionSummary = {
     moisture_median: number
     temperature_median: number
     light_level_median: number
-    battery_voltage_median: number | null
+    battery_voltage_median?: number | null
     moisture_state: 'critical' | 'warning' | 'ok'
     temperature_state: 'cold' | 'ok' | 'hot'
     light_state: 'dark' | 'ok' | 'bright'
@@ -79,7 +79,7 @@ const getMessageState = (summary: ProcessSessionSummary): MessageState => {
 }
 
 const updateCriticalState = async (summary: ProcessSessionSummary, plant: PlantLookup): Promise<number | null> => {
-    const { api } = await convexApiPromise
+    const api = anyApi
     const deviceId = plant.device_id ?? summary.sensor_id
 
     if (summary.moisture_state === 'critical') {
@@ -99,7 +99,7 @@ const updateCriticalState = async (summary: ProcessSessionSummary, plant: PlantL
 }
 
 const getPlantForSensor = async (summary: ProcessSessionSummary): Promise<PlantLookup | null> => {
-    const { api } = await convexApiPromise
+    const api = anyApi
     const matchingPlants = (await convex.query(api.plants.getPlantsBySensorId, {
         sensor_id: summary.sensor_id,
         backend_secret: CONVEX_BACKEND_SECRET,
@@ -142,7 +142,7 @@ type NotificationOptions = {
 const getCurrentUtcHour = (): number => new Date().getUTCHours()
 
 const getPlantMessageWindowState = async (clerkId: string): Promise<UserLookup | null> => {
-    const { api } = await convexApiPromise
+    const api = anyApi
 
     return (await convex.query(api.users.getUserByClerkIdForProcessor, {
         clerk_id: clerkId,
@@ -154,7 +154,7 @@ const createInboxMessage = async (
     type: MessageType,
     options: NotificationOptions = {},
 ): Promise<N8nNotificationPayload | null> => {
-    const { api } = await convexApiPromise
+    const api = anyApi
     const plant = await getPlantForSensor(summary)
 
     if (!plant) {
@@ -180,7 +180,14 @@ const createInboxMessage = async (
     const contactWindowStart = user?.contact_window_start
     const contactWindowEnd = user?.contact_window_end
 
-    if (type === 'plant_message' && !options.override_contact_window && contactWindowStart !== undefined && contactWindowEnd !== undefined) {
+    if (
+        type === 'plant_message' &&
+        !options.override_contact_window &&
+        contactWindowStart !== undefined &&
+        contactWindowStart !== null &&
+        contactWindowEnd !== undefined &&
+        contactWindowEnd !== null
+    ) {
         const currentHour = getCurrentUtcHour()
 
         if (isOutsideContactWindow(currentHour, contactWindowStart, contactWindowEnd)) {
@@ -250,7 +257,7 @@ export const sendSummaryNotifications = async (
 }
 
 const notifyN8nIfNeeded = async (payload: N8nNotificationPayload, options: NotificationOptions = {}): Promise<void> => {
-    const { api } = await convexApiPromise
+    const api = anyApi
 
     const user = (await convex.query(api.users.getUserByClerkIdForProcessor, {
         clerk_id: payload.clerk_id,
@@ -306,9 +313,12 @@ const notifyN8nIfNeeded = async (payload: N8nNotificationPayload, options: Notif
 export const processSessionIfReady = async (
     sensor_id: string,
     date: string,
-    options: NotificationOptions = {},
+    optionsOrForce: NotificationOptions | boolean = {},
+    maybeForce = false,
 ): Promise<ProcessSessionResult> => {
-    const { api } = await convexApiPromise
+    const force = typeof optionsOrForce === 'boolean' ? optionsOrForce : maybeForce
+    const options = typeof optionsOrForce === 'boolean' ? {} : optionsOrForce
+    const api = anyApi
 
     const readings = (await convex.query(api.readings.getReadingsBySensorAndDate, {
         sensor_id,
@@ -316,7 +326,7 @@ export const processSessionIfReady = async (
         backend_secret: CONVEX_BACKEND_SECRET,
     })) as Reading[]
 
-    if (readings.length < MIN_READINGS_REQUIRED) {
+    if (!force && readings.length < MIN_READINGS_REQUIRED) {
         return { status: 'insufficient_data' }
     }
 
@@ -393,6 +403,11 @@ export const processSessionIfReady = async (
     await sendSummaryNotifications(summary, 'plant_message', options)
 
     await convex.mutation(api.readings.deleteReadingsBySensorAndDate, {
+        sensor_id,
+        date,
+        backend_secret: CONVEX_BACKEND_SECRET,
+    })
+    await convex.mutation(api.readings.markSessionProcessed, {
         sensor_id,
         date,
         backend_secret: CONVEX_BACKEND_SECRET,

@@ -1,7 +1,6 @@
 import { convex } from './convex.js'
 import { CONVEX_BACKEND_SECRET, N8N_SYSTEM_WEBHOOK_URL } from '../config.js'
-
-const convexApiPromise = import('../../../convex/_generated/api.js')
+import { anyApi } from 'convex/server'
 
 export type SensorProblemReason = 'connection_failed' | 'max_retries_exceeded'
 
@@ -71,9 +70,9 @@ export const handleSensorProblem = async (input: {
   device_id: string
   reason: SensorProblemReason
 }): Promise<{ statusCode: 200 | 404; body: Record<string, unknown> }> => {
-  const { api } = await convexApiPromise
+  const api = anyApi
 
-  const setStatusResult = (await convex.mutation((api as any).sensors.setSensorStatus, {
+  const setStatusResult = (await convex.mutation(api.sensors.setSensorStatus, {
     device_id: input.device_id,
     status: 'needs_remeasurement',
     backend_secret: CONVEX_BACKEND_SECRET,

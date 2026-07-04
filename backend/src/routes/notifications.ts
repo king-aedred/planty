@@ -36,7 +36,7 @@ notificationsRouter.post('/update-inbox', async (c) => {
   const { api } = await convexApiPromise
 
   await convex.mutation(api.messages.updateMessageText, {
-    message_id: messageId,
+    message_id: messageId as any,
     text,
     backend_secret: CONVEX_BACKEND_SECRET,
   })

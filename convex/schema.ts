@@ -40,6 +40,18 @@ export default defineSchema({
     created_at: v.number(),
   }).index("by_device_id", ["device_id"]),
 
+  sensor_sessions: defineTable({
+    sensor_id: v.string(),
+    date: v.string(),
+    started_at: v.number(),
+    readings_count: v.number(),
+    status: v.union(
+      v.literal("collecting"),
+      v.literal("processed"),
+      v.literal("failed"),
+    ),
+  }).index("by_sensor_and_date", ["sensor_id", "date"]),
+
   readings: defineTable({
     sensor_id: v.string(),
     moisture: v.number(),

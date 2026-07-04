@@ -1,34 +1,25 @@
 import { Hono } from 'hono'
 import { serve } from '@hono/node-server'
+import { anyApi } from 'convex/server'
 import { convex } from './lib/convex.js'
-import { CONVEX_BACKEND_SECRET, CRON_SCHEDULE_ENABLED } from './config.js'
-import { startCronJob } from './jobs/cronJob.js'
+import { CONVEX_BACKEND_SECRET, INTERNAL_WEBHOOK_SECRET } from './config.js'
 import devModeRouter from './routes/devmode.js'
 import notificationsRouter from './routes/notifications.js'
 import sensorRouter from './routes/sensor.js'
 import telegramRouter from './routes/telegram.js'
-
-const convexApiPromise = import('../../convex/_generated/api.js')
+import { processSessionIfReady } from './lib/processor.js'
 
 const app = new Hono() //initialisiere ein App Objekt (in dem Fall Hono)
-
-if (CRON_SCHEDULE_ENABLED) {
-    startCronJob()
-} else {
-    console.log('Cron scheduler disabled; manual dev trigger only')
-}
 
 app.get('/', (c) => { // get() definiert eine HTTP GET-Route am angegebenen Pfad, '/' heißt also direkt unterm Root
     return c.text('Planty Backend Running') // (c) ist kontext und enthält daten der http request und liefert respone möglichkeiten wie text()
 })
 
 app.get('/api/status/:sensor_id/:date', async (c) => {
-    const { api } = await convexApiPromise
-
     const sensorId = c.req.param('sensor_id')
     const date = c.req.param('date')
 
-    const summary = await convex.query(api.readings.getSummaryBySensorAndDate, {
+    const summary = await convex.query(anyApi.readings.getSummaryBySensorAndDate, {
         sensor_id: sensorId,
         date,
         backend_secret: CONVEX_BACKEND_SECRET,
@@ -39,6 +30,46 @@ app.get('/api/status/:sensor_id/:date', async (c) => {
     }
 
     return c.json(summary)
+})
+
+app.post('/process-session', async (c) => {
+    const authorizationHeader = c.req.header('Authorization')
+
+    if (!authorizationHeader || authorizationHeader !== `Bearer ${INTERNAL_WEBHOOK_SECRET}`) {
+        return c.json({ error: 'forbidden' }, 401)
+    }
+
+    const body: unknown = await c.req.json().catch(() => null)
+
+    if (typeof body !== 'object' || body === null) {
+        return c.json({ error: 'Invalid JSON body' }, 400)
+    }
+
+    const payload = body as Record<string, unknown>
+    const sensorId = typeof payload.sensor_id === 'string' ? payload.sensor_id.trim() : ''
+    const date = typeof payload.date === 'string' ? payload.date.trim() : ''
+    const reason = payload.reason
+
+    if (!sensorId || !date || (reason !== 'complete' && reason !== 'partial_12')) {
+        return c.json({ error: 'sensor_id, date and reason are required' }, 400)
+    }
+
+    const existingSession = await convex.query(anyApi.readings.getSession, {
+        sensor_id: sensorId,
+        date,
+    })
+
+    if (existingSession?.status === 'processed') {
+        return c.json({ status: 'already_processed' })
+    }
+
+    const result = await processSessionIfReady(sensorId, date, true)
+
+    if (result.status === 'already_processed') {
+        return c.json({ status: 'already_processed' })
+    }
+
+    return c.json({ status: 'ok' })
 })
 
 app.route('/dev', devModeRouter)

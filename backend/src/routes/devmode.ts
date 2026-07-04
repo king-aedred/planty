@@ -384,8 +384,13 @@ devModeRouter.post('/trigger-cron', async (c) => {
     }
   }
 
-  const { runCronJobOnce } = await import('../jobs/cronJob.js')
-  const result = await runCronJobOnce()
+  const result = []
+
+  for (const sensorId of sensorIds) {
+    const processingResult = await processSessionIfReady(sensorId, date)
+    console.log(`[dev/trigger-cron] sensor_id=${sensorId} date=${date}`, processingResult)
+    result.push({ sensor_id: sensorId, result: processingResult })
+  }
 
   return c.json({
     status: 'ok',

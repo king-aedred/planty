@@ -1,6 +1,6 @@
 import { httpRouter } from "convex/server";
 import { httpAction, mutation, query } from "./_generated/server";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { v } from "convex/values";
 
 const http = httpRouter()
@@ -90,6 +90,63 @@ http.route({ //reagiert auf POSTs auf /readings
             }
 
             const result = await ctx.runMutation(api.http.createReading, body)
+            const sensorDate = body.timestamp.substring(0, 10)
+            const serverDate = new Date().toISOString().substring(0, 10)
+
+            if (Math.abs(daysBetween(sensorDate, serverDate)) > 1) {
+                console.warn("[convex/http] reading date differs from server date", {
+                    sensor_date: sensorDate,
+                    server_date: serverDate,
+                })
+            }
+
+            await ctx.runMutation(api.readings.getOrCreateSession, {
+                sensor_id: body.sensor_id,
+                date: sensorDate,
+                backend_secret: process.env.BACKEND_SECRET ?? '',
+            })
+
+            const readingsCount = await ctx.runMutation(api.readings.incrementSessionReadings, {
+                sensor_id: body.sensor_id,
+                date: sensorDate,
+                backend_secret: process.env.BACKEND_SECRET ?? '',
+            })
+
+            if (readingsCount === 18) {
+                const internalWebhookSecret = process.env.INTERNAL_WEBHOOK_SECRET
+
+                if (!internalWebhookSecret) {
+                    throw new Error("Missing INTERNAL_WEBHOOK_SECRET")
+                }
+
+                await fetch(process.env.BACKEND_PROCESS_URL ?? 'http://localhost:3000/process-session', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${internalWebhookSecret}`,
+                    },
+                    body: JSON.stringify({
+                        sensor_id: body.sensor_id,
+                        date: sensorDate,
+                        reason: 'complete',
+                    }),
+                })
+            }
+
+            if (readingsCount === 1) {
+                await ctx.scheduler.runAfter(4 * 60 * 1000, internal.readings.scheduleSessionCheck, {
+                    sensor_id: body.sensor_id,
+                    date: sensorDate,
+                    check_type: 'timeout_12',
+                })
+
+                await ctx.scheduler.runAfter(8 * 60 * 1000, internal.readings.scheduleSessionCheck, {
+                    sensor_id: body.sensor_id,
+                    date: sensorDate,
+                    check_type: 'timeout_failed',
+                })
+            }
+
             await ctx.runMutation(api.sensors.updateLastSeen, {
                 device_id: body.sensor_id,
                 backend_secret: process.env.BACKEND_SECRET ?? '',
@@ -120,5 +177,12 @@ http.route({
         })
     }),
 })
+
+const daysBetween = (leftDate: string, rightDate: string): number => {
+    const left = new Date(`${leftDate}T00:00:00.000Z`).getTime()
+    const right = new Date(`${rightDate}T00:00:00.000Z`).getTime()
+
+    return Math.round((left - right) / (24 * 60 * 60 * 1000))
+}
 
 export default http;

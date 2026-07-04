@@ -81,9 +81,9 @@ export const CRON_SCHEDULE_ENABLED = parseBooleanEnv(nodeProcess?.env.CRON_SCHED
 export const TELEGRAM_BOT_TOKEN = nodeProcess?.env.TELEGRAM_BOT_TOKEN
 export const N8N_WEBHOOK_URL = nodeProcess?.env.N8N_WEBHOOK_URL ?? 'http://localhost:5678/webhook/plant-critical'
 export const N8N_SYSTEM_WEBHOOK_URL = nodeProcess?.env.N8N_SYSTEM_WEBHOOK_URL ?? 'http://localhost:5678/webhook/system-alert'
-export const INTERNAL_WEBHOOK_SECRET = nodeProcess?.env.INTERNAL_WEBHOOK_SECRET
+const internalWebhookSecret = nodeProcess?.env.INTERNAL_WEBHOOK_SECRET
 export const SENSOR_WEBHOOK_SECRET = nodeProcess?.env.SENSOR_WEBHOOK_SECRET ?? ''
-export const CONVEX_BACKEND_SECRET = nodeProcess?.env.CONVEX_BACKEND_SECRET
+const convexBackendSecret = nodeProcess?.env.CONVEX_BACKEND_SECRET
 
 const convexUrl = nodeProcess?.env.CONVEX_URL
 const clerkSecretKey = nodeProcess?.env.CLERK_SECRET_KEY
@@ -96,13 +96,15 @@ if (!clerkSecretKey) {
     throw new Error('CLERK_SECRET_KEY is missing')
 }
 
-if (!INTERNAL_WEBHOOK_SECRET) {
+if (!internalWebhookSecret) {
     throw new Error('INTERNAL_WEBHOOK_SECRET is missing')
 }
 
-if (!CONVEX_BACKEND_SECRET) {
+if (!convexBackendSecret) {
     throw new Error('CONVEX_BACKEND_SECRET is missing')
 }
 
 export const CONVEX_URL: string = convexUrl
 export const CLERK_SECRET_KEY: string = clerkSecretKey
+export const INTERNAL_WEBHOOK_SECRET: string = internalWebhookSecret
+export const CONVEX_BACKEND_SECRET: string = convexBackendSecret
