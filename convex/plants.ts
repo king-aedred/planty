@@ -13,7 +13,7 @@ const DEFAULT_THRESHOLDS = {
 } as const;
 
 type PlantWithLatestSummary = Doc<"plants"> & {
-  latestSummary: Doc<"daily_summaries"> | null;
+  latestSummary: Doc<"session_summaries"> | null;
 };
 
 const requireSelf = async (ctx: QueryCtx | MutationCtx, clerkId: string) => {
@@ -45,9 +45,9 @@ async function getPlantsWithLatestSummaries(ctx: QueryCtx, clerkId: string): Pro
   await requireSelf(ctx, clerkId);
 
   const plants = (await ctx.db.query("plants").collect()) as Doc<"plants">[];
-  const summaries = (await ctx.db.query("daily_summaries").collect()) as Doc<"daily_summaries">[];
+  const summaries = (await ctx.db.query("session_summaries").collect()) as Doc<"session_summaries">[];
 
-  const latestSummaryBySensor = new Map<string, Doc<"daily_summaries">>();
+  const latestSummaryBySensor = new Map<string, Doc<"session_summaries">>();
 
   for (const summary of summaries) {
     const currentLatest = latestSummaryBySensor.get(summary.sensor_id);
@@ -430,8 +430,8 @@ export const getLatestSummary = query({
     }
 
     return await ctx.db
-      .query("daily_summaries")
-      .withIndex("by_sensor_and_date", (q) => q.eq("sensor_id", args.device_id))
+      .query("session_summaries")
+      .withIndex("by_sensor_and_created_at", (q) => q.eq("sensor_id", args.device_id))
       .order("desc")
       .first();
   },
@@ -451,7 +451,7 @@ export const getHistoricalSummaries = query({
     }
 
     return await ctx.db
-      .query("daily_summaries")
+      .query("session_summaries")
       .withIndex("by_sensor_and_date", (q) =>
         q.eq("sensor_id", args.device_id).gte("date", args.from_date).lte("date", args.to_date),
       )

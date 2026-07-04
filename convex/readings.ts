@@ -50,6 +50,38 @@ export const getReadingsBySessionId = query({
   },
 })
 
+export const triggerProcessSession = internalAction({
+  args: {
+    session_id: v.id("sensor_sessions"),
+    sensor_id: v.string(),
+    date: v.string(),
+    reason: v.string(),
+  },
+  handler: async (_ctx, args) => {
+    console.log("triggerProcessSession called", args)
+    console.log("BACKEND_PROCESS_URL", process.env.BACKEND_PROCESS_URL)
+
+    const backendUrl = process.env.BACKEND_PROCESS_URL ?? 'http://localhost:3000/process-session'
+    const secret = process.env.INTERNAL_WEBHOOK_SECRET ?? ''
+
+    const response = await fetch(backendUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${secret}`,
+      },
+      body: JSON.stringify({
+        session_id: args.session_id,
+        sensor_id: args.sensor_id,
+        date: args.date,
+        reason: args.reason,
+      }),
+    })
+
+    console.log("fetch done", response.status)
+  },
+})
+
 export const getOrCreateSession = mutation({
   args: {
     sensor_id: v.string(),
@@ -212,22 +244,11 @@ export const scheduleSessionCheck = internalAction({
 
     if (args.check_type === "timeout_12") {
       if (session.readings_count >= 12) {
-        if (!backendProcessUrl || !internalWebhookSecret) {
-          throw new Error("Missing backend process webhook configuration")
-        }
-
-        await fetch(backendProcessUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${internalWebhookSecret}`,
-          },
-          body: JSON.stringify({
-            session_id: args.session_id,
-            sensor_id: session.sensor_id,
-            date: session.date,
-            reason: "partial_12",
-          }),
+        await ctx.runAction(internal.readings.triggerProcessSession, {
+          session_id: args.session_id,
+          sensor_id: session.sensor_id,
+          date: session.date,
+          reason: "partial_12",
         })
       }
 
@@ -288,7 +309,7 @@ export const getSensorsWithReadingsToday = query({
 
     for (const sensorId of sensorIds) {
       const summary = await ctx.db
-        .query("daily_summaries")
+        .query("session_summaries")
         .withIndex("by_sensor_and_date", (q) =>
           q.eq("sensor_id", sensorId).eq("date", args.date),
         )
@@ -330,29 +351,43 @@ export const getSensorIdsWithReadingsToday = query({
   },
 })
 
-export const getSummaryBySensorAndDate = query({
+export const getLatestSessionSummary = query({
   args: {
     sensor_id: v.string(),
-    date: v.string(),
     backend_secret: v.string(),
   },
   handler: async (ctx, args) => {
     requireBackendSecret(args.backend_secret)
 
     const summary = await ctx.db
-      .query("daily_summaries")
-      .withIndex("by_sensor_and_date", (q) =>
-        q.eq("sensor_id", args.sensor_id).eq("date", args.date),
-      )
+      .query("session_summaries")
+      .withIndex("by_sensor_and_created_at", (q) => q.eq("sensor_id", args.sensor_id))
+      .order("desc")
       .first()
 
     return summary
   },
 })
 
-export const createDailySummary = mutation({
+export const getSummaryBySessionId = query({
+  args: {
+    session_id: v.id("sensor_sessions"),
+    backend_secret: v.string(),
+  },
+  handler: async (ctx, args) => {
+    requireBackendSecret(args.backend_secret)
+
+    return await ctx.db
+      .query("session_summaries")
+      .withIndex("by_session_id", (q) => q.eq("session_id", args.session_id))
+      .first()
+  },
+})
+
+export const createSessionSummary = mutation({
   args: {
     sensor_id: v.string(),
+    session_id: v.id("sensor_sessions"),
     date: v.string(),
     moisture_median: v.number(),
     temperature_median: v.number(),
@@ -380,8 +415,9 @@ export const createDailySummary = mutation({
 
     const createdAt = Date.now()
 
-    const id = await ctx.db.insert("daily_summaries", {
+    const id = await ctx.db.insert("session_summaries", {
       sensor_id: args.sensor_id,
+      session_id: args.session_id,
       date: args.date,
       moisture_median: args.moisture_median,
       temperature_median: args.temperature_median,
@@ -399,8 +435,9 @@ export const createDailySummary = mutation({
   },
 })
 
-export const createDailySummaryDirect = mutation({
+export const createSessionSummaryDirect = mutation({
   args: {
+    session_id: v.id("sensor_sessions"),
     device_id: v.string(),
     date: v.string(),
     moisture_median: v.number(),
@@ -428,18 +465,17 @@ export const createDailySummaryDirect = mutation({
     requireBackendSecret(args.backend_secret)
 
     const existingSummary = await ctx.db
-      .query("daily_summaries")
-      .withIndex("by_sensor_and_date", (q) =>
-        q.eq("sensor_id", args.device_id).eq("date", args.date),
-      )
+      .query("session_summaries")
+      .withIndex("by_session_id", (q) => q.eq("session_id", args.session_id))
       .first()
 
     if (existingSummary) {
-      await ctx.db.delete(existingSummary._id)
+      return { ok: true, id: existingSummary._id, replaced: false }
     }
 
-    const id = await ctx.db.insert("daily_summaries", {
+    const id = await ctx.db.insert("session_summaries", {
       sensor_id: args.device_id,
+      session_id: args.session_id,
       date: args.date,
       moisture_median: args.moisture_median,
       temperature_median: args.temperature_median,
@@ -450,33 +486,7 @@ export const createDailySummaryDirect = mutation({
       created_at: args.created_at,
     })
 
-    return { ok: true, id, replaced: Boolean(existingSummary) }
-  },
-})
-
-export const deleteDailySummaryBySensorAndDate = mutation({
-  args: {
-    sensor_id: v.string(),
-    date: v.string(),
-    backend_secret: v.string(),
-  },
-  handler: async (ctx, args) => {
-    requireBackendSecret(args.backend_secret)
-
-    const summary = await ctx.db
-      .query("daily_summaries")
-      .withIndex("by_sensor_and_date", (q) =>
-        q.eq("sensor_id", args.sensor_id).eq("date", args.date),
-      )
-      .first()
-
-    if (!summary) {
-      return { ok: true, deleted: false }
-    }
-
-    await ctx.db.delete(summary._id)
-
-    return { ok: true, deleted: true }
+    return { ok: true, id, replaced: false }
   },
 })
 

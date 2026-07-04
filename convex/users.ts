@@ -71,7 +71,73 @@ export const getUserByClerkIdForProcessor = query({
       notification_rules: user.notification_rules,
       contact_window_start: user.contact_window_start,
       contact_window_end: user.contact_window_end,
+      max_notifications_per_day: user.max_notifications_per_day,
     };
+  },
+});
+
+export const getNotificationCount = query({
+  args: {
+    clerk_id: v.string(),
+    backend_secret: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const expectedSecret = process.env.BACKEND_SECRET
+
+    if (!expectedSecret || args.backend_secret !== expectedSecret) {
+      throw new Error("Unauthorized: invalid backend secret")
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerk_id", args.clerk_id))
+      .first();
+
+    if (!user) {
+      return 0;
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+
+    if (user.notifications_sent_date !== today) {
+      return 0;
+    }
+
+    return user.notifications_sent_today ?? 0;
+  },
+});
+
+export const incrementNotificationCount = mutation({
+  args: {
+    clerk_id: v.string(),
+    backend_secret: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const expectedSecret = process.env.BACKEND_SECRET
+
+    if (!expectedSecret || args.backend_secret !== expectedSecret) {
+      throw new Error("Unauthorized: invalid backend secret")
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerk_id", args.clerk_id))
+      .first();
+
+    if (!user) {
+      return 0;
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const currentCount = user.notifications_sent_date === today ? (user.notifications_sent_today ?? 0) : 0;
+    const nextCount = currentCount + 1;
+
+    await ctx.db.patch(user._id, {
+      notifications_sent_today: nextCount,
+      notifications_sent_date: today,
+    });
+
+    return nextCount;
   },
 });
 
@@ -88,6 +154,7 @@ export const createUser = mutation({
       email: args.email,
       plan: "basic",
       is_dev: false,
+      max_notifications_per_day: 3,
       created_at: Date.now(),
     });
 
@@ -104,6 +171,7 @@ export const updateUserSettings = mutation({
       contact_window_end: v.optional(v.number()),
       measure_time: v.optional(v.string()),
       phone_number: v.optional(v.string()),
+      max_notifications_per_day: v.optional(v.number()),
     }),
   },
   handler: async (ctx, args) => {
@@ -124,6 +192,7 @@ export const updateUserSettings = mutation({
       contact_window_end: args.settings.contact_window_end,
       measure_time: args.settings.measure_time,
       phone_number: args.settings.phone_number,
+      max_notifications_per_day: args.settings.max_notifications_per_day,
     });
 
     return user._id;

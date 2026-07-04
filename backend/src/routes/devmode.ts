@@ -196,12 +196,6 @@ devModeRouter.post('/simulate', async (c) => {
   const { api } = await convexApiPromise
   const date = getTodayDate()
 
-  const resetResult = await convex.mutation(api.readings.deleteDailySummaryBySensorAndDate, {
-    sensor_id: deviceId,
-    date,
-    backend_secret: CONVEX_BACKEND_SECRET,
-  }) as { ok: true; deleted: boolean }
-
   if (scenario === 'offline') {
     return c.json({ status: 'no_data', inserted: 0 })
   }
@@ -212,6 +206,11 @@ devModeRouter.post('/simulate', async (c) => {
     backend_secret: CONVEX_BACKEND_SECRET,
   })) as { _id: string }
   const sessionId = session._id as Id<"sensor_sessions">
+
+  const existingSummary = await convex.query(api.readings.getSummaryBySessionId, {
+    session_id: sessionId,
+    backend_secret: CONVEX_BACKEND_SECRET,
+  })
 
   const readings = buildScenarioReadings(deviceId, scenario, date)
   const insertedIds: string[] = []
@@ -254,7 +253,8 @@ devModeRouter.post('/simulate', async (c) => {
   return c.json({
     status: 'ok',
     inserted: insertedIds.length,
-    reset_summary: resetResult.deleted,
+    reset_summary: false,
+    existing_summary: Boolean(existingSummary),
     result: processResult,
   })
 })
@@ -305,9 +305,16 @@ devModeRouter.post('/time-travel', async (c) => {
   }
 
   const { api } = await convexApiPromise
-  const existingSummary = await convex.query(api.readings.getSummaryBySensorAndDate, {
+  const session = (await convex.mutation(api.readings.getOrCreateSession, {
     sensor_id: deviceId,
     date,
+    backend_secret: CONVEX_BACKEND_SECRET,
+  })) as { _id: string }
+
+  const sessionId = session._id as Id<"sensor_sessions">
+
+  const existingSummary = await convex.query(api.readings.getSummaryBySessionId, {
+    session_id: sessionId,
     backend_secret: CONVEX_BACKEND_SECRET,
   })
 
@@ -336,7 +343,8 @@ devModeRouter.post('/time-travel', async (c) => {
 
   const createdAt = buildTimestampFromDateAndHour(date, hour)
 
-  await convex.mutation(api.readings.createDailySummaryDirect, {
+  await convex.mutation(api.readings.createSessionSummaryDirect, {
+    session_id: sessionId,
     device_id: deviceId,
     date,
     moisture_median: moistureMedian,
@@ -349,6 +357,7 @@ devModeRouter.post('/time-travel', async (c) => {
 
   await sendSummaryNotifications({
     sensor_id: deviceId,
+    session_id: sessionId,
     date,
     moisture_median: moistureMedian,
     temperature_median: temperatureMedian,
@@ -387,20 +396,6 @@ devModeRouter.post('/trigger-cron', async (c) => {
     backend_secret: CONVEX_BACKEND_SECRET,
   })
 
-  let resetSummaries = 0
-
-  for (const sensorId of sensorIds) {
-    const resetResult = (await convex.mutation(api.readings.deleteDailySummaryBySensorAndDate, {
-      sensor_id: sensorId,
-      date,
-      backend_secret: CONVEX_BACKEND_SECRET,
-    })) as { ok: true; deleted: boolean }
-
-    if (resetResult.deleted) {
-      resetSummaries += 1
-    }
-  }
-
   const result = []
 
   for (const sensorId of sensorIds) {
@@ -422,7 +417,6 @@ devModeRouter.post('/trigger-cron', async (c) => {
 
   return c.json({
     status: 'ok',
-    reset_summaries: resetSummaries,
     result,
   })
 })

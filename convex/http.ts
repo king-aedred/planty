@@ -125,24 +125,11 @@ http.route({ //reagiert auf POSTs auf /readings
             })
 
             if (readingsCount === 18) {
-                const internalWebhookSecret = process.env.INTERNAL_WEBHOOK_SECRET
-
-                if (!internalWebhookSecret) {
-                    throw new Error("Missing INTERNAL_WEBHOOK_SECRET")
-                }
-
-                await fetch(process.env.BACKEND_PROCESS_URL ?? 'http://localhost:3000/process-session', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: `Bearer ${internalWebhookSecret}`,
-                    },
-                    body: JSON.stringify({
-                        session_id: sessionId,
-                        sensor_id: body.sensor_id,
-                        date: sensorDate,
-                        reason: 'complete',
-                    }),
+                await ctx.runAction(internal.readings.triggerProcessSession, {
+                    session_id: sessionId,
+                    sensor_id: body.sensor_id,
+                    date: sensorDate,
+                    reason: 'complete',
                 })
             }
 

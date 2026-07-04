@@ -35,6 +35,7 @@ type UserSettingsPayload = {
   contact_window_end?: number
   measure_time?: string
   phone_number?: string
+  max_notifications_per_day?: number
 }
 
 const notificationRuleStates: Array<{
@@ -122,6 +123,7 @@ export default function GlobalSettingsScreen() {
   const [contactWindowStart, setContactWindowStart] = useState('9')
   const [contactWindowEnd, setContactWindowEnd] = useState('21')
   const [phoneNumber, setPhoneNumber] = useState('')
+  const [maxNotificationsPerDay, setMaxNotificationsPerDay] = useState(3)
   const [username, setUsername] = useState('')
   const [usernameMessage, setUsernameMessage] = useState('')
   const [usernameMessageKind, setUsernameMessageKind] = useState<'success' | 'error' | ''>('')
@@ -155,6 +157,7 @@ export default function GlobalSettingsScreen() {
 
     setNotificationRules(normalizeNotificationRules(currentUser.notification_rules))
     setPhoneNumber(currentUser.phone_number ?? '')
+    setMaxNotificationsPerDay(currentUser.max_notifications_per_day ?? 3)
   }, [currentUser])
 
   const goBack = () => {
@@ -193,6 +196,7 @@ export default function GlobalSettingsScreen() {
         notification_rules: normalizeNotificationRules(notificationRules),
         measure_time: measureTimeValue,
         phone_number: phoneNumber.trim() || undefined,
+        max_notifications_per_day: maxNotificationsPerDay,
       }
 
       if (contactStartValue !== null) {
@@ -385,6 +389,14 @@ export default function GlobalSettingsScreen() {
                   <Field label="Bis" value={contactWindowEnd} onChangeText={setContactWindowEnd} placeholder="21" autoCapitalize="none" />
                 </View>
 
+                <StepperRow
+                  label="Max. Benachrichtigungen pro Tag"
+                  value={maxNotificationsPerDay}
+                  min={1}
+                  max={10}
+                  onChange={setMaxNotificationsPerDay}
+                />
+
                 {timeError ? <Text style={styles.feedbackError}>{timeError}</Text> : null}
 
                 <Field label="Telefonnummer" value={phoneNumber} onChangeText={setPhoneNumber} placeholder="Optional" autoCapitalize="none" />
@@ -474,6 +486,55 @@ function CheckboxRow({
         {hint ? <Text style={styles.checkboxHint}>{hint}</Text> : null}
       </View>
     </Pressable>
+  )
+}
+
+function StepperRow({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  label: string
+  value: number
+  min: number
+  max: number
+  onChange: (nextValue: number) => void
+}) {
+  const decrement = () => onChange(Math.max(min, value - 1))
+  const increment = () => onChange(Math.min(max, value + 1))
+
+  return (
+    <View style={styles.stepperWrapper}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <View style={styles.stepperRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${label} verringern`}
+          onPress={decrement}
+          disabled={value <= min}
+          style={({ pressed }) => [styles.stepperButton, pressed && styles.pressed, value <= min && styles.stepperButtonDisabled]}
+        >
+          <Text style={styles.stepperButtonText}>−</Text>
+        </Pressable>
+
+        <View style={styles.stepperValueBox}>
+          <Text style={styles.stepperValueText}>{value}</Text>
+        </View>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${label} erhöhen`}
+          onPress={increment}
+          disabled={value >= max}
+          style={({ pressed }) => [styles.stepperButton, pressed && styles.pressed, value >= max && styles.stepperButtonDisabled]}
+        >
+          <Text style={styles.stepperButtonText}>+</Text>
+        </Pressable>
+      </View>
+      <Text style={styles.helperText}>Bereich {min} bis {max}, Standard 3.</Text>
+    </View>
   )
 }
 
@@ -702,6 +763,47 @@ const styles = StyleSheet.create({
   },
   notificationRuleOptions: {
     gap: 10,
+  },
+  stepperWrapper: {
+    gap: 8,
+  },
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  stepperButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  stepperButtonDisabled: {
+    opacity: 0.45,
+  },
+  stepperButtonText: {
+    color: colors.text,
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  stepperValueBox: {
+    flex: 1,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  stepperValueText: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '800',
   },
   telegramConnectionBox: {
     gap: 10,

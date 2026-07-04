@@ -17,16 +17,15 @@ app.get('/', (c) => { // get() definiert eine HTTP GET-Route am angegebenen Pfad
 
 app.get('/api/status/:sensor_id/:date', async (c) => {
     const sensorId = c.req.param('sensor_id')
-    const date = c.req.param('date')
+    c.req.param('date')
 
-    const summary = await convex.query(anyApi.readings.getSummaryBySensorAndDate, {
+    const summary = await convex.query(anyApi.readings.getLatestSessionSummary, {
         sensor_id: sensorId,
-        date,
         backend_secret: CONVEX_BACKEND_SECRET,
     })
 
     if (!summary) {
-        return c.json({ error: 'daily_summary not found' }, 404)
+        return c.json({ error: 'session_summary not found' }, 404)
     }
 
     return c.json(summary)
@@ -59,6 +58,9 @@ app.post('/process-session', async (c) => {
         backend_secret: CONVEX_BACKEND_SECRET,
     })
 
+    console.log('[process-session] session_id:', sessionId)
+    console.log('[process-session] session status:', existingSession?.status)
+
     if (!existingSession) {
         return c.json({ error: 'session not found' }, 404)
     }
@@ -67,13 +69,18 @@ app.post('/process-session', async (c) => {
         return c.json({ status: 'already_processed' })
     }
 
-    const result = await processSessionIfReady(sessionId, true)
+    try {
+        const result = await processSessionIfReady(sessionId, true)
 
-    if (result.status === 'already_processed') {
-        return c.json({ status: 'already_processed' })
+        if (result.status === 'already_processed') {
+            return c.json({ status: 'already_processed' })
+        }
+
+        return c.json({ status: 'ok' })
+    } catch (error) {
+        console.error('[process-session] error:', error)
+        return c.json({ error: 'internal server error' }, 500)
     }
-
-    return c.json({ status: 'ok' })
 })
 
 app.route('/dev', devModeRouter)

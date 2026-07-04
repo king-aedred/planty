@@ -7,6 +7,9 @@ export default defineSchema({
     email: v.string(),
     plan: v.string(),
     is_dev: v.boolean(),
+    max_notifications_per_day: v.optional(v.number()),
+    notifications_sent_today: v.optional(v.number()),
+    notifications_sent_date: v.optional(v.string()),
     notification_rules: v.optional(
       v.object({
         ok: v.array(v.union(v.literal("push"), v.literal("telegram"), v.literal("call"))),
@@ -102,8 +105,9 @@ export default defineSchema({
     .index("by_species_id", ["id"])
     .index("by_common_name", ["common_name"]),
 
-  daily_summaries: defineTable({
+  session_summaries: defineTable({
     sensor_id: v.string(),
+    session_id: v.id("sensor_sessions"),
     date: v.string(),
     moisture_median: v.number(),
     temperature_median: v.number(),
@@ -125,7 +129,10 @@ export default defineSchema({
       v.literal("bright"),
     ),
     created_at: v.number(),
-  }).index("by_sensor_and_date", ["sensor_id", "date"]),
+  })
+    .index("by_session_id", ["session_id"])
+    .index("by_sensor_and_date", ["sensor_id", "date"])
+    .index("by_sensor_and_created_at", ["sensor_id", "created_at"]),
 
   messages: defineTable({
     clerk_id: v.string(),

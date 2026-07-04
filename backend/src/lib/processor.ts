@@ -12,6 +12,7 @@ import {
 
 export type ProcessSessionSummary = {
     sensor_id: string
+    session_id: string
     date: string
     moisture_median: number
     temperature_median: number
@@ -41,6 +42,21 @@ type SessionLookup = {
     date: string
 }
 
+type SessionSummaryLookup = {
+    _id: string
+    sensor_id: string
+    session_id: string
+    date: string
+    moisture_median: number
+    temperature_median: number
+    light_level_median: number
+    battery_voltage_median?: number | null
+    moisture_state: 'critical' | 'warning' | 'ok'
+    temperature_state: 'cold' | 'ok' | 'hot'
+    light_state: 'dark' | 'ok' | 'bright'
+    created_at: number
+}
+
 type PlantLookup = {
     _id: string
     name: string
@@ -55,6 +71,7 @@ type UserLookup = {
     expo_push_token?: string | null
     contact_window_start?: number | null
     contact_window_end?: number | null
+    max_notifications_per_day?: number | null
     notification_rules?: {
         ok: string[]
         warning: string[]
@@ -132,6 +149,7 @@ type N8nNotificationPayload = {
     message_id: string
     consecutive_critical_days: number | null
     character: PlantCharacter
+    is_thank_you: boolean
     notification_rules: {
         ok: string[]
         warning: string[]
@@ -143,6 +161,7 @@ type N8nNotificationPayload = {
 
 type NotificationOptions = {
     override_contact_window?: boolean
+    is_thank_you?: boolean
 }
 
 const getCurrentUtcHour = (): number => new Date().getUTCHours()
@@ -207,13 +226,36 @@ const createInboxMessage = async (
         }
     }
 
+    if (type === 'plant_message' && !options.is_thank_you) {
+        const notificationCount = (await convex.query(api.users.getNotificationCount, {
+            clerk_id: plant.clerk_id,
+            backend_secret: CONVEX_BACKEND_SECRET,
+        })) as number
+        const notificationLimit = user?.max_notifications_per_day ?? 3
+
+        if (notificationCount >= notificationLimit) {
+            console.log('[processor] Notification limit reached, skipping inbox message', {
+                clerk_id: plant.clerk_id,
+                notificationCount,
+                notificationLimit,
+            })
+
+            return null
+        }
+
+        await convex.mutation(api.users.incrementNotificationCount, {
+            clerk_id: plant.clerk_id,
+            backend_secret: CONVEX_BACKEND_SECRET,
+        })
+    }
+
     const messageId = (await convex.mutation(api.messages.createMessage, {
         clerk_id: plant.clerk_id,
         device_id: summary.sensor_id,
         plant_name: plant.name,
         type,
         state: messageState,
-        text: '🌱 Nachricht wird generiert...',
+        text: options.is_thank_you ? '🌱 Danke-Nachricht wird generiert...' : '🌱 Nachricht wird generiert...',
         backend_secret: CONVEX_BACKEND_SECRET,
     })) as string
 
@@ -226,6 +268,7 @@ const createInboxMessage = async (
         message_id: messageId,
         consecutive_critical_days: criticalDays,
         character: plantCharacter,
+        is_thank_you: options.is_thank_you ?? false,
         notification_rules: {
             ok: [],
             warning: [],
@@ -284,6 +327,7 @@ const notifyN8nIfNeeded = async (payload: N8nNotificationPayload, options: Notif
             },
             telegram_chat_id: user.telegram_chat_id ?? null,
             expo_push_token: user.expo_push_token ?? null,
+            is_thank_you: payload.is_thank_you,
         }
 
         console.log('[processor] n8n request start', {
@@ -322,6 +366,7 @@ export const processSessionIfReady = async (
     maybeForce = false,
 ): Promise<ProcessSessionResult> => {
     const force = typeof optionsOrForce === 'boolean' ? optionsOrForce : maybeForce
+    console.log('[processor] processSessionIfReady called', { sessionId: session_id, force })
     const options = typeof optionsOrForce === 'boolean' ? {} : optionsOrForce
     const api = anyApi
 
@@ -339,19 +384,25 @@ export const processSessionIfReady = async (
         backend_secret: CONVEX_BACKEND_SECRET,
     })) as Reading[]
 
+    console.log('[processor] readings loaded', { count: readings.length })
+
     if (!force && readings.length < MIN_READINGS_REQUIRED) {
         return { status: 'insufficient_data' }
     }
 
-    const existingSummary = await convex.query(api.readings.getSummaryBySensorAndDate, {
-        sensor_id: session.sensor_id,
-        date: session.date,
+    const existingSummary = (await convex.query(api.readings.getSummaryBySessionId, {
+        session_id,
         backend_secret: CONVEX_BACKEND_SECRET,
-    })
+    })) as SessionSummaryLookup | null
 
     if (existingSummary) {
         return { status: 'already_processed' }
     }
+
+    const previousSummary = (await convex.query(api.readings.getLatestSessionSummary, {
+        sensor_id: session.sensor_id,
+        backend_secret: CONVEX_BACKEND_SECRET,
+    })) as SessionSummaryLookup | null
 
     const moistureValues = readings.map((reading) => reading.moisture)
     const temperatureValues = readings.map((reading) => reading.temperature)
@@ -376,8 +427,15 @@ export const processSessionIfReady = async (
     const lightMedian = calculateMedian(lightValues)
     const batteryVoltageMedian = batteryVoltageValues.length > 0 ? calculateMedian(batteryVoltageValues) : null
 
+    console.log('[processor] medians calculated', {
+        moisture_median: moistureMedian,
+        temperature_median: temperatureMedian,
+        light_level_median: lightMedian,
+    })
+
     const summary: ProcessSessionSummary = {
         sensor_id: session.sensor_id,
+        session_id,
         date: session.date,
         moisture_median: moistureMedian,
         temperature_median: temperatureMedian,
@@ -403,7 +461,11 @@ export const processSessionIfReady = async (
 
     const { created_at, battery_voltage_median, ...summaryPayload } = summary
 
-    await convex.mutation(api.readings.createDailySummary, {
+    const shouldSendThankYou = Boolean(
+        previousSummary && moistureMedian > previousSummary.moisture_median + 15,
+    )
+
+    await convex.mutation(api.readings.createSessionSummary, {
         ...summaryPayload,
         ...(battery_voltage_median === null ? {} : { battery_voltage_median }),
         backend_secret: CONVEX_BACKEND_SECRET,
@@ -413,7 +475,10 @@ export const processSessionIfReady = async (
         status: 'active',
         backend_secret: CONVEX_BACKEND_SECRET,
     })
-    await sendSummaryNotifications(summary, 'plant_message', options)
+    await sendSummaryNotifications(summary, 'plant_message', {
+        ...options,
+        is_thank_you: shouldSendThankYou,
+    })
 
     await convex.mutation(api.readings.deleteReadingsBySessionId, {
         session_id,
