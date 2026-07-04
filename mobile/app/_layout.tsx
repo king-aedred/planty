@@ -40,7 +40,9 @@ export default function RootLayout() {
       <ClerkLoadingGate>
         <ConvexWithClerk>
           <PushTokenRegistration />
-          <Stack screenOptions={{ animation: 'slide_from_right', headerShown: false }} />
+          <Stack screenOptions={{ animation: 'slide_from_right', headerShown: false }}>
+            <Stack.Screen name="demo-call" options={{ headerShown: false }} />
+          </Stack>
         </ConvexWithClerk>
       </ClerkLoadingGate>
     </ClerkProvider>

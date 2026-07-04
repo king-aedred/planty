@@ -1,18 +1,84 @@
 import { Hono } from 'hono'
 import { serve } from '@hono/node-server'
 import { anyApi } from 'convex/server'
+import { createReadStream, existsSync } from 'fs'
+import path from 'path'
+import twilio from 'twilio'
+import { fileURLToPath } from 'url'
 import { convex } from './lib/convex.js'
-import { CONVEX_BACKEND_SECRET, INTERNAL_WEBHOOK_SECRET } from './config.js'
+import {
+    CONVEX_BACKEND_SECRET,
+    DEMO_PHONE_NUMBER,
+    DEMO_SECRET,
+    INTERNAL_WEBHOOK_SECRET,
+    TWILIO_ACCOUNT_SID,
+    TWILIO_AUTH_TOKEN,
+    TWILIO_FROM_NUMBER,
+} from './config.js'
 import devModeRouter from './routes/devmode.js'
 import notificationsRouter from './routes/notifications.js'
 import sensorRouter from './routes/sensor.js'
 import telegramRouter from './routes/telegram.js'
 import { processSessionIfReady } from './lib/processor.js'
 
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
 const app = new Hono() //initialisiere ein App Objekt (in dem Fall Hono)
+
+app.get('/audio/:filename', async (c) => {
+    const filename = c.req.param('filename')
+    const filePath = path.join(__dirname, '../public', filename)
+
+    console.log('[audio] serving file:', filePath)
+
+    if (!existsSync(filePath)) {
+        console.log('[audio] file not found:', filePath)
+        return c.text('Not found', 404)
+    }
+
+    const stream = createReadStream(filePath)
+    c.header('Content-Type', 'audio/mpeg')
+    return c.body(stream as any)
+})
 
 app.get('/', (c) => { // get() definiert eine HTTP GET-Route am angegebenen Pfad, '/' heißt also direkt unterm Root
     return c.text('Planty Backend Running') // (c) ist kontext und enthält daten der http request und liefert respone möglichkeiten wie text()
+})
+
+app.get('/demo/call-veronica', async (c) => {
+    const secret = c.req.query('secret') ?? ''
+
+    if (secret !== DEMO_SECRET) {
+        return c.json({ error: 'forbidden' }, 403)
+    }
+
+    if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_FROM_NUMBER || !DEMO_PHONE_NUMBER) {
+        return c.json({ error: 'twilio_not_configured' }, 500)
+    }
+
+    try {
+        const client = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+        const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Say language="de-DE">Hallo hier ist Veronica, deine Chinesische Feige!</Say></Response>`
+
+        const call = await client.calls.create({
+            from: TWILIO_FROM_NUMBER,
+            to: DEMO_PHONE_NUMBER,
+            twiml: twiml,
+        })
+
+        return c.json({ ok: true, callSid: call.sid })
+    } catch (error) {
+        console.error('[demo/call-veronica] failed to place call', error)
+        return c.json({ error: 'internal server error' }, 500)
+    }
+})
+
+app.get('/demo/veronica-twiml', (c) => {
+    const voiceResponse = new twilio.twiml.VoiceResponse()
+    voiceResponse.play('https://api.getplanty.de/audio/veronica.mp3')
+    c.header('Content-Type', 'text/xml')
+    return c.text(voiceResponse.toString())
 })
 
 app.get('/api/status/:sensor_id/:date', async (c) => {

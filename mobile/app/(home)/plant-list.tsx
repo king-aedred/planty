@@ -3,6 +3,7 @@ import { api } from '../../../convex/_generated/api'
 import BurgerMenu from '../../components/burger-menu'
 import { useQuery } from 'convex/react'
 import { useRouter } from 'expo-router'
+import { useRef } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
@@ -16,6 +17,8 @@ export default function PlantListScreen() {
   const { useUser } = require('@clerk/expo') as typeof import('@clerk/expo')
   const { user } = useUser()
   const router = useRouter()
+  const secretTapCountRef = useRef(0)
+  const secretTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const clerkId = user?.id ?? ''
   const plants = useQuery(api.plants.getAllPlantsByClerkId, clerkId ? { clerk_id: clerkId } : 'skip')
@@ -27,6 +30,30 @@ export default function PlantListScreen() {
 
   const handleOpenInbox = () => {
     router.push('/(home)/inbox')
+  }
+
+  const handleSecretHeaderTap = () => {
+    secretTapCountRef.current += 1
+
+    if (secretTapTimeoutRef.current) {
+      clearTimeout(secretTapTimeoutRef.current)
+    }
+
+    secretTapTimeoutRef.current = setTimeout(() => {
+      secretTapCountRef.current = 0
+      secretTapTimeoutRef.current = null
+    }, 900)
+
+    if (secretTapCountRef.current >= 5) {
+      secretTapCountRef.current = 0
+
+      if (secretTapTimeoutRef.current) {
+        clearTimeout(secretTapTimeoutRef.current)
+        secretTapTimeoutRef.current = null
+      }
+
+      router.push('/demo-call')
+    }
   }
 
   const handleOpenPlant = (plantId: string) => {
@@ -59,10 +86,10 @@ export default function PlantListScreen() {
               ) : null}
             </View>
 
-            <View style={styles.headerText}>
+            <Pressable accessibilityRole="button" onPress={handleSecretHeaderTap} style={styles.headerText}>
               <Text style={styles.eyebrow}>Planty</Text>
               <Text style={styles.title}>Meine Pflanzen</Text>
-            </View>
+            </Pressable>
           </View>
 
           <View style={styles.list}>
