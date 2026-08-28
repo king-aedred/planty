@@ -2,8 +2,8 @@ import { Colors } from '@/constants/colors'
 import { api } from '../../../convex/_generated/api'
 import BurgerMenu from '../../components/burger-menu'
 import { useMutation, useQuery } from 'convex/react'
-import { useRouter } from 'expo-router'
-import { useMemo, useState } from 'react'
+import { useLocalSearchParams, useRouter } from 'expo-router'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Alert,
   Keyboard,
@@ -28,6 +28,7 @@ export default function AddPlantScreen() {
   const { useUser } = require('@clerk/expo') as typeof import('@clerk/expo')
   const { user } = useUser()
   const router = useRouter()
+  const { device_id: preselectedDeviceId } = useLocalSearchParams<{ device_id?: string }>()
 
   const clerkId = user?.id ?? ''
   const [step, setStep] = useState<Step>('choice')
@@ -46,11 +47,21 @@ export default function AddPlantScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const plants = useQuery(api.plants.getAllPlantsByClerkId, clerkId ? { clerk_id: clerkId } : 'skip')
+  const sensors = useQuery(api.sensors.getSensorsByClerkId, clerkId ? {} : 'skip')
   const speciesResults = useQuery(api.plant_species.searchPlantSpecies, { search: speciesSearch }) ?? []
-  const registerSensor = useMutation(api.sensors.registerSensor)
+  const claimSensor = useMutation(api.sensors.claimSensor)
   const createPlant = useMutation(api.plants.createPlant)
   const transferSensor = useMutation(api.plants.transferSensor)
   const deletePlant = useMutation(api.plants.deletePlant)
+
+  const freeSensors = useMemo(() => (sensors ?? []).filter((sensor) => !sensor.has_plant), [sensors])
+
+  useEffect(() => {
+    if (preselectedDeviceId) {
+      setDeviceId(preselectedDeviceId)
+      setStep('with-sensor')
+    }
+  }, [preselectedDeviceId])
 
   const plantsWithSensors = useMemo(
     () => (plants ?? []).filter((plant) => Boolean(plant.device_id ?? plant.sensor_id)),
@@ -118,7 +129,7 @@ export default function AddPlantScreen() {
     setIsSubmitting(true)
 
     try {
-      await registerSensor({ device_id: trimmedDeviceId })
+      await claimSensor({ device_id: trimmedDeviceId })
       await createPlant({
         clerk_id: clerkId,
         device_id: trimmedDeviceId,
@@ -365,17 +376,41 @@ export default function AddPlantScreen() {
                     />
                   ) : null}
 
-                  <Field label="Sensor ID" value={deviceId} onChangeText={setDeviceId} placeholder="fake-sensor-001" autoCapitalize="none" />
+                  {freeSensors.length > 0 ? (
+                    <View style={styles.selectorList}>
+                      <Text style={styles.selectorLabel}>Freier Sensor</Text>
+                      {freeSensors.map((sensor) => (
+                        <Pressable
+                          key={String(sensor._id)}
+                          accessibilityRole="button"
+                          onPress={() => setDeviceId(sensor.device_id)}
+                          style={({ pressed }) => [
+                            styles.sensorCard,
+                            deviceId === sensor.device_id && styles.sensorCardSelected,
+                            pressed && styles.sensorCardPressed,
+                          ]}
+                        >
+                          <View style={styles.sensorCardHeader}>
+                            <Text style={styles.sensorCardTitle}>{sensor.device_id}</Text>
+                            <View style={deviceId === sensor.device_id ? styles.radioSelected : styles.radio} />
+                          </View>
+                          <Text style={styles.sensorCardText}>Bereit für eine Pflanze</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={styles.noticeText}>Keine freien Sensoren vorhanden. Du kannst die Pflanze ohne Sensor anlegen.</Text>
+                  )}
 
                   {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
 
                   <Pressable
                     accessibilityRole="button"
-                    disabled={!(selectedSpecies || (isManualSpeciesEntry && manualPlantName.trim())) || !deviceId.trim() || isSubmitting}
+                    disabled={!(selectedSpecies || (isManualSpeciesEntry && manualPlantName.trim())) || !deviceId.trim() || isSubmitting || freeSensors.length === 0}
                     style={({ pressed }) => [
                       styles.primaryButton,
                       (pressed || isSubmitting) && styles.primaryButtonPressed,
-                      (!(selectedSpecies || (isManualSpeciesEntry && manualPlantName.trim())) || !deviceId.trim()) && styles.primaryButtonDisabled,
+                      (!(selectedSpecies || (isManualSpeciesEntry && manualPlantName.trim())) || !deviceId.trim() || freeSensors.length === 0) && styles.primaryButtonDisabled,
                     ]}
                     onPress={() => void handleRegisterWithSensor()}
                   >

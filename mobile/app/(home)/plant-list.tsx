@@ -22,10 +22,19 @@ export default function PlantListScreen() {
 
   const clerkId = user?.id ?? ''
   const plants = useQuery(api.plants.getAllPlantsByClerkId, clerkId ? { clerk_id: clerkId } : 'skip')
+  const sensors = useQuery(api.sensors.getSensorsByClerkId, clerkId ? {} : 'skip')
   const unreadCount = useQuery(api.messages.getUnreadCount, clerkId ? { clerk_id: clerkId } : 'skip')
 
   const handleAddPlant = () => {
     router.push('/(home)/add-plant')
+  }
+
+  const handleAddSensor = () => {
+    router.push('/(home)/add-sensor')
+  }
+
+  const handleAssignSensor = (deviceId: string) => {
+    router.push({ pathname: '/(home)/add-plant', params: { device_id: deviceId } })
   }
 
   const handleOpenInbox = () => {
@@ -88,13 +97,12 @@ export default function PlantListScreen() {
 
             <Pressable accessibilityRole="button" onPress={handleSecretHeaderTap} style={styles.headerText}>
               <Text style={styles.eyebrow}>Planty</Text>
-              <Text style={styles.title}>Meine Pflanzen</Text>
+              <Text style={styles.title}>Mein Planty</Text>
             </Pressable>
           </View>
 
           <View style={styles.list}>
-            {plants && plants.length > 0 ? (
-              plants.map((plant) => {
+            {plants?.map((plant) => {
                 const latestSummary = plant.latestSummary ?? null
                 const plantId = String(plant._id)
                 const deviceId = plant.device_id ?? plant.sensor_id ?? null
@@ -124,24 +132,39 @@ export default function PlantListScreen() {
                     </Text>
                   </Pressable>
                 )
-              })
-            ) : (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyStateTitle}>Noch keine Pflanzen</Text>
-                <Text style={styles.emptyStateText}>
-                  Lege deine erste Pflanze an oder verbinde einen Sensor später.
-                </Text>
+              })}
+            {sensors?.filter((sensor) => !sensor.has_plant).map((sensor) => (
+              <View key={String(sensor._id)} style={styles.sensorCard}>
+                <View style={styles.cardTitleBlock}>
+                  <Text style={styles.cardTitle}>Sensor {sensor.device_id}</Text>
+                  <Text style={styles.sensorOpenStep}>Noch keiner Pflanze zugeordnet</Text>
+                </View>
+                <Text style={styles.summaryText}>Dein Sensor ist bereit für den nächsten Schritt.</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => handleAssignSensor(sensor.device_id)}
+                  style={({ pressed }) => [styles.assignButton, pressed && styles.cardPressed]}
+                >
+                  <Text style={styles.assignButtonText}>Pflanze zuordnen</Text>
+                </Pressable>
               </View>
-            )}
+            ))}
+            {plants?.length === 0 && sensors?.filter((sensor) => !sensor.has_plant).length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateTitle}>Dein Planty ist bereit</Text>
+                <Text style={styles.emptyStateText}>Füge einen Sensor oder deine erste Pflanze hinzu.</Text>
+              </View>
+            ) : null}
           </View>
 
-          <Pressable
-            accessibilityRole="button"
-            onPress={handleAddPlant}
-            style={({ pressed }) => [styles.addPlantButton, pressed && styles.addPlantButtonPressed]}
-          >
-            <Text style={styles.addPlantButtonText}>+ Pflanze hinzufügen</Text>
-          </Pressable>
+          <View style={styles.actions}>
+            <Pressable accessibilityRole="button" onPress={handleAddSensor} style={({ pressed }) => [styles.addSensorButton, pressed && styles.addPlantButtonPressed]}>
+              <Text style={styles.addPlantButtonText}>+ Sensor hinzufügen</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={handleAddPlant} style={({ pressed }) => [styles.addPlantButton, pressed && styles.addPlantButtonPressed]}>
+              <Text style={styles.addPlantButtonText}>+ Pflanze hinzufügen</Text>
+            </Pressable>
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -301,6 +324,19 @@ const styles = StyleSheet.create({
   list: {
     gap: 12,
   },
+  sensorCard: {
+    backgroundColor: '#10261D',
+    borderColor: colors.accent,
+    borderWidth: 1,
+    borderRadius: 22,
+    padding: 16,
+    gap: 12,
+  },
+  sensorOpenStep: {
+    color: colors.accent,
+    fontSize: 14,
+    lineHeight: 20,
+  },
   card: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
@@ -392,6 +428,31 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     textAlign: 'center',
+  },
+  actions: {
+    gap: 10,
+  },
+  addSensorButton: {
+    width: '100%',
+    borderRadius: 18,
+    backgroundColor: colors.accent,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  assignButton: {
+    alignSelf: 'flex-start',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  assignButtonText: {
+    color: colors.accent,
+    fontSize: 14,
+    fontWeight: '700',
   },
   addPlantButton: {
     width: '100%',

@@ -2,6 +2,8 @@ import { decode, encode } from 'base-64'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Linking, PermissionsAndroid, Platform, Pressable } from 'react-native'
 import { BleManager, Device, State } from 'react-native-ble-plx'
+import { useConvex } from 'convex/react'
+import { api } from '../../../convex/_generated/api'
 import { Button } from '../ui/button'
 import { Card } from '../ui/card'
 import { SectionLabel } from '../ui/section-label'
@@ -11,9 +13,9 @@ import { Spinner, Text, XStack, YStack } from 'tamagui'
 export const PLANTY_SERVICE_UUID = '7b7f0001-4e6d-4a5d-9b8e-2f2d6a0c1101'
 const DEVICE_ID_UUID = '7b7f0002-4e6d-4a5d-9b8e-2f2d6a0c1101'
 const WIFI_CREDENTIALS_UUID = '7b7f0003-4e6d-4a5d-9b8e-2f2d6a0c1101'
-const PROVISIONING_STATUS_UUID = '7b7f0004-4e6d-4a5d-9b8e-2f2d6a0c1101'
 const SCAN_TIMEOUT_MS = 10000
-const PROVISIONING_TIMEOUT_MS = 30000
+const PROVISIONING_TIMEOUT_MS = 60000
+const PROVISIONING_POLL_INTERVAL_MS = 2000
 
 const bleManager = Platform.OS === 'web' ? null : new BleManager()
 
@@ -21,7 +23,7 @@ type BleProvisioningProps = {
   onProvisioned: (deviceId: string) => Promise<void>
 }
 
-type ProvisioningState = 'scan' | 'connecting' | 'credentials' | 'sending' | 'success'
+type ProvisioningState = 'scan' | 'connecting' | 'credentials' | 'sending' | 'waiting' | 'success'
 
 function getAdvertisedDeviceId(device: Device) {
   if (device.manufacturerData) {
@@ -61,6 +63,7 @@ async function requestBluetoothPermission() {
 }
 
 export function BleProvisioning({ onProvisioned }: BleProvisioningProps) {
+  const convex = useConvex()
   const [state, setState] = useState<ProvisioningState>('scan')
   const [devices, setDevices] = useState<Device[]>([])
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null)
@@ -68,9 +71,12 @@ export function BleProvisioning({ onProvisioned }: BleProvisioningProps) {
   const [ssid, setSsid] = useState('')
   const [password, setPassword] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
+  const [canRestartPairing, setCanRestartPairing] = useState(false)
   const scanTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const statusSubscription = useRef<{ remove: () => void } | null>(null)
   const disconnectedSubscription = useRef<{ remove: () => void } | null>(null)
+  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const provisioningTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const expectedDisconnect = useRef(false)
 
   const stopScan = useCallback(() => {
     if (scanTimer.current) {
@@ -87,6 +93,8 @@ export function BleProvisioning({ onProvisioned }: BleProvisioningProps) {
     setSelectedDevice(null)
     setDeviceId('')
     setState('scan')
+    setCanRestartPairing(false)
+    expectedDisconnect.current = false
 
     if (!bleManager) {
       setErrorMessage('BLE-Provisioning ist nur auf einem iOS- oder Android-Gerät verfügbar.')
@@ -145,8 +153,9 @@ export function BleProvisioning({ onProvisioned }: BleProvisioningProps) {
     void startScan()
     return () => {
       stopScan()
-      statusSubscription.current?.remove()
       disconnectedSubscription.current?.remove()
+      if (pollTimer.current) clearTimeout(pollTimer.current)
+      if (provisioningTimer.current) clearTimeout(provisioningTimer.current)
     }
   }, [startScan, stopScan])
 
@@ -168,7 +177,11 @@ export function BleProvisioning({ onProvisioned }: BleProvisioningProps) {
       setDeviceId(connectedDeviceId)
       setSelectedDevice(connectedDevice)
       disconnectedSubscription.current = connectedDevice.onDisconnected(() => {
-        statusSubscription.current?.remove()
+        if (expectedDisconnect.current) {
+          setState('waiting')
+          setErrorMessage('Dein Planty startet neu und verbindet sich mit dem WLAN.')
+          return
+        }
         setSelectedDevice(null)
         setDeviceId('')
         setState('scan')
@@ -183,57 +196,16 @@ export function BleProvisioning({ onProvisioned }: BleProvisioningProps) {
   }
 
   const sendCredentials = async () => {
-    if (!selectedDevice || !ssid.trim() || state === 'sending') {
+    if (!selectedDevice || !ssid.trim() || state === 'sending' || state === 'waiting') {
       return
     }
 
     setState('sending')
     setErrorMessage('')
-    statusSubscription.current?.remove()
+    setCanRestartPairing(false)
+    expectedDisconnect.current = true
 
     try {
-      let completed = false
-      const finish = async (status: string) => {
-        if (completed) {
-          return
-        }
-        if (status === 'failed') {
-          completed = true
-          statusSubscription.current?.remove()
-          setState('credentials')
-          setErrorMessage('Das Gerät konnte sich nicht mit diesem WLAN verbinden. Prüfe SSID und Passwort.')
-          return
-        }
-        if (status !== 'success') {
-          return
-        }
-
-        completed = true
-        statusSubscription.current?.remove()
-        try {
-          await onProvisioned(deviceId)
-          setState('success')
-        } catch {
-          setState('credentials')
-          setErrorMessage('Sensor konnte nicht registriert werden. Bitte versuche es erneut.')
-        }
-      }
-
-      statusSubscription.current = selectedDevice.monitorCharacteristicForService(
-        PLANTY_SERVICE_UUID,
-        PROVISIONING_STATUS_UUID,
-        (error, characteristic) => {
-          if (error) {
-            setState('credentials')
-            setErrorMessage('Status des Sensors konnte nicht gelesen werden. Bitte versuche es erneut.')
-            return
-          }
-          if (characteristic?.value) {
-            void finish(decode(characteristic.value))
-          }
-        },
-      )
-
       const payload = encode(JSON.stringify({ ssid: ssid.trim(), password }))
       await selectedDevice.writeCharacteristicWithResponseForService(
         PLANTY_SERVICE_UUID,
@@ -241,22 +213,68 @@ export function BleProvisioning({ onProvisioned }: BleProvisioningProps) {
         payload,
       )
 
-      setTimeout(() => {
-        if (!completed) {
-          completed = true
-          statusSubscription.current?.remove()
-          setState('credentials')
-          setErrorMessage('Die WLAN-Verbindung dauert zu lange. Prüfe die Zugangsdaten und versuche es erneut.')
+      setState('waiting')
+      setErrorMessage('Dein Planty startet neu und verbindet sich mit dem WLAN.')
+
+      const startedAt = Date.now()
+      let pollingComplete = false
+      const finishPolling = () => {
+        pollingComplete = true
+        if (pollTimer.current) clearTimeout(pollTimer.current)
+        if (provisioningTimer.current) clearTimeout(provisioningTimer.current)
+      }
+      const poll = async () => {
+        if (pollingComplete) {
+          return
         }
+
+        try {
+          const result = await convex.query(api.sensors.isDeviceOnline, { device_id: deviceId })
+          if (result.found) {
+            finishPolling()
+            try {
+              await onProvisioned(deviceId)
+              setState('success')
+              setErrorMessage('')
+            } catch {
+              setState('credentials')
+              setErrorMessage('Sensor konnte nicht registriert werden. Bitte versuche es erneut.')
+            }
+            return
+          }
+        } catch {
+          // Keep polling through transient network/query failures.
+        }
+
+        if (Date.now() - startedAt >= PROVISIONING_TIMEOUT_MS) {
+          finishPolling()
+          setState('credentials')
+          setCanRestartPairing(true)
+          setErrorMessage('Dein Planty konnte nicht online gehen. Prüfe, ob das WLAN erreichbar ist und ob das WLAN-Passwort stimmt. Starte das Pairing danach neu.')
+          return
+        }
+
+        pollTimer.current = setTimeout(() => void poll(), PROVISIONING_POLL_INTERVAL_MS)
+      }
+
+      pollTimer.current = setTimeout(() => void poll(), PROVISIONING_POLL_INTERVAL_MS)
+      provisioningTimer.current = setTimeout(() => {
+        if (pollingComplete) {
+          return
+        }
+        finishPolling()
+        setState('credentials')
+        setCanRestartPairing(true)
+        setErrorMessage('Dein Planty konnte nicht online gehen. Prüfe, ob das WLAN erreichbar ist und ob das WLAN-Passwort stimmt. Starte das Pairing danach neu.')
       }, PROVISIONING_TIMEOUT_MS)
     } catch {
-      statusSubscription.current?.remove()
+      expectedDisconnect.current = false
       setState('credentials')
       setErrorMessage('WLAN-Zugangsdaten konnten nicht übertragen werden. Bitte versuche es erneut.')
     }
   }
 
-  if (state === 'credentials' || state === 'sending' || state === 'success') {
+  if (state === 'credentials' || state === 'sending' || state === 'waiting' || state === 'success') {
     return (
       <Card>
         <SectionLabel>Sensor verbunden</SectionLabel>
@@ -270,6 +288,16 @@ export function BleProvisioning({ onProvisioned }: BleProvisioningProps) {
         </YStack>
         {state === 'success' ? (
           <Text fontFamily="$body" color="$accent">WLAN eingerichtet. Sensor wird registriert.</Text>
+        ) : state === 'waiting' ? (
+          <YStack gap="$4">
+            <Text fontFamily="$heading" fontSize={22} color="$textPrimary">
+              Dein Planty ist unterwegs
+            </Text>
+            <Text fontFamily="$body" color="$textSecondary">
+              Das Gerät startet neu und verbindet sich mit deinem WLAN. Gleich sollte es online sein.
+            </Text>
+            <Spinner color="$accent" />
+          </YStack>
         ) : (
           <YStack gap="$12">
             <TextField label="WLAN-Name (SSID)" value={ssid} onChangeText={setSsid} autoCapitalize="none" />
@@ -278,6 +306,11 @@ export function BleProvisioning({ onProvisioned }: BleProvisioningProps) {
             <Button onPress={() => void sendCredentials()} loading={state === 'sending'} disabled={!ssid.trim()}>
               WLAN verbinden
             </Button>
+            {canRestartPairing ? (
+              <Button variant="secondary" onPress={() => void startScan()}>
+                Pairing neu starten
+              </Button>
+            ) : null}
           </YStack>
         )}
       </Card>

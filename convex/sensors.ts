@@ -61,23 +61,24 @@ export const getSensorStatus = query({
   },
   handler: async (ctx, args) => {
     const identity = await requireAuthenticatedUser(ctx);
-    const plants = await ctx.db.query("plants").collect();
-    const ownsSensor = plants.some(
-      (plant) =>
-        (plant.device_id === args.device_id || plant.sensor_id === args.device_id) &&
-        plant.clerk_id === identity.subject,
-    );
-
-    if (!ownsSensor) {
-      throw new Error("Unauthorized");
-    }
-
     const sensor = await ctx.db
       .query("sensors")
       .withIndex("by_device_id", (q) => q.eq("device_id", args.device_id))
       .first();
 
-    if (!sensor || typeof sensor.last_seen !== "number") {
+    if (!sensor) {
+      return {
+        status: "unknown" as const,
+        last_seen: null,
+        last_seen_formatted: "unbekannt",
+      };
+    }
+
+    if (sensor.clerk_id !== identity.subject) {
+      throw new Error("Unauthorized");
+    }
+
+    if (typeof sensor.last_seen !== "number") {
       return {
         status: "unknown" as const,
         last_seen: null,
@@ -119,39 +120,79 @@ export const getSensorByDeviceId = query({
       return null;
     }
 
-    const plants = await ctx.db.query("plants").collect();
-    const ownsSensor = plants.some(
-      (plant) => (plant.device_id === args.device_id || plant.sensor_id === args.device_id) && plant.clerk_id === identity.subject,
-    );
-
-    return ownsSensor ? sensor : null;
+    return sensor.clerk_id === identity.subject ? sensor : null;
   },
 });
 
-export const registerSensor = mutation({
+export const isDeviceOnline = query({
   args: {
     device_id: v.string(),
   },
   handler: async (ctx, args) => {
     await requireAuthenticatedUser(ctx);
 
+    const sensor = await ctx.db
+      .query("sensors")
+      .withIndex("by_device_id", (q) => q.eq("device_id", args.device_id))
+      .first();
+
+    return {
+      found: sensor !== null,
+      last_seen: sensor?.last_seen ?? null,
+    };
+  },
+});
+
+export const getSensorsByClerkId = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await requireAuthenticatedUser(ctx);
+    const sensors = await ctx.db
+      .query("sensors")
+      .withIndex("by_clerk_id", (q) => q.eq("clerk_id", identity.subject))
+      .collect();
+    const plants = await ctx.db.query("plants").collect();
+
+    return sensors.map((sensor) => ({
+      ...sensor,
+      has_plant: plants.some(
+        (plant) => plant.device_id === sensor.device_id || plant.sensor_id === sensor.device_id,
+      ),
+    }));
+  },
+});
+
+export const claimSensor = mutation({
+  args: {
+    device_id: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await requireAuthenticatedUser(ctx);
+
     const existingSensor = await ctx.db
       .query("sensors")
       .withIndex("by_device_id", (q) => q.eq("device_id", args.device_id))
       .first();
 
-    if (existingSensor) {
-      throw new Error("Sensor already registered");
+    if (!existingSensor) {
+      throw new Error("Sensor wurde noch nicht online gesehen");
     }
 
-    const createdAt = Date.now();
+    if (existingSensor.clerk_id && existingSensor.clerk_id !== identity.subject) {
+      throw new Error("Sensor gehört bereits einem anderen User");
+    }
 
-    return await ctx.db.insert("sensors", {
-      device_id: args.device_id,
-      firmware_version: undefined,
-      last_seen: createdAt,
-      created_at: createdAt,
+    if (existingSensor.clerk_id === identity.subject) {
+      return existingSensor._id;
+    }
+
+    await ctx.db.patch(existingSensor._id, {
+      clerk_id: identity.subject,
+      claimed_at: Date.now(),
     });
+
+    // TODO Sicherheit: Aktuell kann jeder eingeloggte User jede noch freie device_id claimen. IDs sind aus der MAC abgeleitet und damit erratbar. Später: Claim-Secret, das das Gerät per BLE ausliefert, gegen device_credentials prüfen (siehe docs/planty_projektbeschreibung.md §7).
+    return existingSensor._id;
   },
 });
 

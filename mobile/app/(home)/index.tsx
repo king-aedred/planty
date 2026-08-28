@@ -1,7 +1,6 @@
 import { api } from '../../../convex/_generated/api'
-import { Redirect } from 'expo-router'
+import { Redirect, useRouter } from 'expo-router'
 import { useMutation, useQuery } from 'convex/react'
-import { useRouter } from 'expo-router'
 import React, { useEffect, useRef } from 'react'
 import { ActivityIndicator, StyleSheet, View } from 'react-native'
 
@@ -89,10 +88,6 @@ function HomeContent() {
 
   if (!isSignedIn) {
     return <Redirect href="/(auth)/sign-in" />
-  }
-
-  if (plants.length === 0) {
-    return <Redirect href="/(home)/onboarding" />
   }
 
   return <Redirect href="/(home)/plant-list" />

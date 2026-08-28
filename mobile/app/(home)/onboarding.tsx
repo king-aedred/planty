@@ -17,7 +17,7 @@ export default function OnboardingScreen() {
   const { useUser } = require('@clerk/expo') as typeof import('@clerk/expo')
   const { user } = useUser()
   const router = useRouter()
-  const registerSensor = useMutation(api.sensors.registerSensor)
+  const claimSensor = useMutation(api.sensors.claimSensor)
   const createPlant = useMutation(api.plants.createPlant)
 
   const clerkId = user?.id ?? ''
@@ -58,7 +58,7 @@ export default function OnboardingScreen() {
 
   const handleSensorProvisioned = async (provisionedDeviceId: string) => {
     try {
-      await registerSensor({ device_id: provisionedDeviceId })
+      await claimSensor({ device_id: provisionedDeviceId })
       setDeviceId(provisionedDeviceId)
       setSensorRegistered(true)
     } catch (error) {

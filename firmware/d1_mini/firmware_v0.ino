@@ -1,12 +1,17 @@
 #include <Arduino.h>
+#include <HTTPClient.h>
 #include <NimBLEDevice.h>
 #include <Preferences.h>
 #include <WiFi.h>
 #include <esp_mac.h>
 #include <esp_system.h>
+#include <time.h>
 
 constexpr uint32_t WIFI_TIMEOUT_MS = 20000;
 constexpr uint32_t WIFI_LOG_INTERVAL_MS = 10000;
+constexpr uint32_t HELLO_RETRY_INTERVAL_MS = 30000;
+constexpr uint32_t NTP_TIMEOUT_MS = 10000;
+constexpr char HELLO_URL[] = "https://dusty-shrimp-80.eu-west-1.convex.site/hello";
 
 constexpr char PROVISIONING_SERVICE_UUID[] = "7b7f0001-4e6d-4a5d-9b8e-2f2d6a0c1101";
 constexpr char DEVICE_ID_UUID[] = "7b7f0002-4e6d-4a5d-9b8e-2f2d6a0c1101";
@@ -19,6 +24,8 @@ String deviceId;
 String pendingCredentials;
 volatile bool credentialsPending = false;
 uint32_t lastWiFiLogAt = 0;
+uint32_t lastHelloAttemptAt = 0;
+bool helloSent = false;
 
 class CredentialsCallbacks : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic* characteristic, NimBLEConnInfo&) override {
@@ -161,6 +168,69 @@ bool connectToWiFi(const String& ssid, const String& password) {
   return connected;
 }
 
+String helloTimestamp() {
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  time_t now = time(nullptr);
+  uint32_t startedAt = millis();
+  while (now < 1700000000 && millis() - startedAt < NTP_TIMEOUT_MS) {
+    delay(250);
+    now = time(nullptr);
+  }
+
+  if (now >= 1700000000) {
+    struct tm timeInfo = {};
+    gmtime_r(&now, &timeInfo);
+    char timestamp[25] = {};
+    strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &timeInfo);
+    Serial.print("hello timestamp from NTP: ");
+    Serial.println(timestamp);
+    return String(timestamp);
+  }
+
+  Serial.println("NTP timeout; using millis() as hello timestamp fallback");
+  return String("millis:") + millis();
+}
+
+bool sendHello() {
+  Serial.println("sending hello");
+  HTTPClient client;
+  if (!client.begin(HELLO_URL)) {
+    Serial.println("hello HTTP begin failed");
+    return false;
+  }
+
+  client.addHeader("Content-Type", "application/json");
+  String timestamp = helloTimestamp();
+  String body = String("{\"device_id\":\"") + deviceId +
+                String("\",\"timestamp\":\"") + timestamp + String("\"}");
+  int responseCode = client.POST(body);
+  Serial.print("hello HTTP response code: ");
+  Serial.println(responseCode);
+  client.end();
+
+  if (responseCode >= 200 && responseCode < 300) {
+    Serial.println("hello sent successfully");
+    return true;
+  }
+
+  Serial.println("hello POST failed; WiFi remains active");
+  return false;
+}
+
+void trySendHello() {
+  if (helloSent || WiFi.status() != WL_CONNECTED) {
+    return;
+  }
+
+  uint32_t now = millis();
+  if (lastHelloAttemptAt != 0 && now - lastHelloAttemptAt < HELLO_RETRY_INTERVAL_MS) {
+    return;
+  }
+
+  lastHelloAttemptAt = now;
+  helloSent = sendHello();
+}
+
 bool connectFromStoredCredentials() {
   String ssid = preferences.getString("ssid");
   String password = preferences.getString("password");
@@ -178,6 +248,7 @@ bool connectFromStoredCredentials() {
   preferences.putBool("provisioned", true);
   Serial.println("provisioning status: success");
   Serial.println("provisioning success, wifi connected");
+  trySendHello();
   return true;
 }
 
@@ -240,7 +311,9 @@ void setup() {
     return;
   }
 
-  connectToWiFi(preferences.getString("ssid"), preferences.getString("password"));
+  if (connectToWiFi(preferences.getString("ssid"), preferences.getString("password"))) {
+    trySendHello();
+  }
 }
 
 void loop() {
@@ -252,8 +325,12 @@ void loop() {
 
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi disconnected; retrying");
-    connectToWiFi(preferences.getString("ssid"), preferences.getString("password"));
+    if (connectToWiFi(preferences.getString("ssid"), preferences.getString("password"))) {
+      trySendHello();
+    }
   }
+
+  trySendHello();
 
   if (millis() - lastWiFiLogAt >= WIFI_LOG_INTERVAL_MS) {
     lastWiFiLogAt = millis();

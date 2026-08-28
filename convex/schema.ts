@@ -29,6 +29,8 @@ export default defineSchema({
 
   sensors: defineTable({
     device_id: v.string(),
+    clerk_id: v.optional(v.string()),
+    claimed_at: v.optional(v.number()),
     firmware_version: v.optional(v.string()),
     status: v.optional(
       v.union(
@@ -41,7 +43,9 @@ export default defineSchema({
     ),
     last_seen: v.number(),
     created_at: v.number(),
-  }).index("by_device_id", ["device_id"]),
+  })
+    .index("by_device_id", ["device_id"])
+    .index("by_clerk_id", ["clerk_id"]),
 
   sensor_logs: defineTable({
     sensor_id: v.string(),

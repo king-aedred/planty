@@ -400,6 +400,16 @@ export const transferSensor = mutation({
     await requireSelf(ctx, fromPlant.clerk_id ?? "");
     await requireSelf(ctx, toPlant.clerk_id ?? "");
 
+    const identity = await ctx.auth.getUserIdentity();
+    const sensor = await ctx.db
+      .query("sensors")
+      .withIndex("by_device_id", (q) => q.eq("device_id", args.device_id))
+      .first();
+
+    if (!identity || !sensor || sensor.clerk_id !== identity.subject) {
+      throw new Error("Unauthorized");
+    }
+
     await ctx.db.patch(args.from_plant_id, {
       device_id: undefined,
       sensor_id: undefined,

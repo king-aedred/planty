@@ -76,6 +76,37 @@ export const createReading = mutation({
     },
 })
 
+export const hello = mutation({
+    args: {
+        device_id: v.string(),
+        timestamp: v.string(),
+    },
+    handler: async (ctx, args) => {
+        const now = Date.now()
+        const sensor = await ctx.db
+            .query("sensors")
+            .withIndex("by_device_id", (q) => q.eq("device_id", args.device_id))
+            .first()
+
+        if (sensor) {
+            await ctx.db.patch(sensor._id, {
+                last_seen: now,
+                status: "active",
+            })
+            return { ok: true, device_id: args.device_id }
+        }
+
+        await ctx.db.insert("sensors", {
+            device_id: args.device_id,
+            last_seen: now,
+            created_at: now,
+            status: "active",
+        })
+
+        return { ok: true, device_id: args.device_id }
+    },
+})
+
 export const getReadings = query({
     args: {},
     handler: async (ctx) => {
@@ -138,6 +169,55 @@ function isSensorLogBody(
     (body.prev_battery_voltage === undefined || (typeof body.prev_battery_voltage === "number" && Number.isFinite(body.prev_battery_voltage)))
   )
 }
+
+function isHelloBody(
+    value: unknown,
+): value is {
+    device_id: string
+    timestamp: string
+} {
+    if (typeof value !== "object" || value === null) {
+        return false
+    }
+
+    const body = value as Record<string, unknown>
+    return (
+        typeof body.device_id === "string" &&
+        body.device_id.length > 0 &&
+        body.device_id.length <= 64 &&
+        typeof body.timestamp === "string" &&
+        body.timestamp.length > 0 &&
+        body.timestamp.length <= 64
+    )
+}
+
+http.route({
+    path: "/hello",
+    method: "POST",
+    handler: httpAction(async (ctx, request) => {
+        try {
+            const body: unknown = await request.json()
+
+            if (!isHelloBody(body)) {
+                return new Response(JSON.stringify({ error: "Request body must contain device_id and timestamp" }), {
+                    status: 400,
+                    headers: { "Content-Type": "application/json" },
+                })
+            }
+
+            const result = await ctx.runMutation(api.http.hello, body)
+            return new Response(JSON.stringify(result), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+            })
+        } catch {
+            return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+                status: 400,
+                headers: { "Content-Type": "application/json" },
+            })
+        }
+    }),
+})
 
 http.route({
     path: "/logs",

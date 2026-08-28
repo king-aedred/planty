@@ -8,6 +8,7 @@ export default function Layout() {
       <Stack.Screen name="plant-list" />
       <Stack.Screen name="inbox" />
       <Stack.Screen name="add-plant" />
+      <Stack.Screen name="add-sensor" />
       <Stack.Screen name="global-settings" />
       <Stack.Screen name="plant-settings" />
       <Stack.Screen name="status" options={{ gestureEnabled: false }} />
