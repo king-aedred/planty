@@ -9,6 +9,17 @@ import { api } from '../../convex/_generated/api'
 import { Stack } from 'expo-router'
 import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native'
 import { useEffect, type ReactNode, useRef } from 'react'
+import { useFonts } from 'expo-font'
+import * as SplashScreen from 'expo-splash-screen'
+import {
+  Antonio_400Regular,
+  Antonio_500Medium,
+  Antonio_600SemiBold,
+  Antonio_700Bold,
+} from '@expo-google-fonts/antonio'
+import { Jost_400Regular, Jost_500Medium, Jost_600SemiBold, Jost_700Bold } from '@expo-google-fonts/jost'
+import { TamaguiProvider } from 'tamagui'
+import { tamaguiConfig } from '../tamagui.config'
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY
 const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL
@@ -34,18 +45,43 @@ Notifications.setNotificationHandler({
   }),
 })
 
+SplashScreen.preventAutoHideAsync()
+
 export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts({
+    Antonio_400Regular,
+    Antonio_500Medium,
+    Antonio_600SemiBold,
+    Antonio_700Bold,
+    Jost_400Regular,
+    Jost_500Medium,
+    Jost_600SemiBold,
+    Jost_700Bold,
+  })
+
+  useEffect(() => {
+    if (fontsLoaded || fontError) {
+      SplashScreen.hideAsync()
+    }
+  }, [fontsLoaded, fontError])
+
+  if (!fontsLoaded && !fontError) {
+    return null
+  }
+
   return (
-    <ClerkProvider publishableKey={clerkPublishableKey} tokenCache={tokenCache}>
-      <ClerkLoadingGate>
-        <ConvexWithClerk>
-          <PushTokenRegistration />
-          <Stack screenOptions={{ animation: 'slide_from_right', headerShown: false }}>
-            <Stack.Screen name="demo-call" options={{ headerShown: false }} />
-          </Stack>
-        </ConvexWithClerk>
-      </ClerkLoadingGate>
-    </ClerkProvider>
+    <TamaguiProvider config={tamaguiConfig} defaultTheme="dark">
+      <ClerkProvider publishableKey={clerkPublishableKey} tokenCache={tokenCache}>
+        <ClerkLoadingGate>
+          <ConvexWithClerk>
+            <PushTokenRegistration />
+            <Stack screenOptions={{ animation: 'slide_from_right', headerShown: false }}>
+              <Stack.Screen name="demo-call" options={{ headerShown: false }} />
+            </Stack>
+          </ConvexWithClerk>
+        </ClerkLoadingGate>
+      </ClerkProvider>
+    </TamaguiProvider>
   )
 }
 

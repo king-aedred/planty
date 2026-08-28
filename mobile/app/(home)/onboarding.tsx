@@ -1,6 +1,7 @@
 import { Colors } from '@/constants/colors'
 import { api } from '../../../convex/_generated/api'
 import BurgerMenu from '../../components/burger-menu'
+import { BleProvisioning } from '../../components/onboarding/ble-provisioning'
 import { useMutation, useQuery } from 'convex/react'
 import { useRouter } from 'expo-router'
 import { Alert, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableWithoutFeedback, View } from 'react-native'
@@ -28,7 +29,8 @@ export default function OnboardingScreen() {
   } | null>(null)
   const [manualPlantName, setManualPlantName] = useState('')
   const [isManualMode, setIsManualMode] = useState(false)
-  const [deviceId, setDeviceId] = useState('fake-sensor-001')
+  const [deviceId, setDeviceId] = useState('')
+  const [sensorRegistered, setSensorRegistered] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const speciesResults = useQuery(api.plant_species.searchPlantSpecies, { search: speciesSearch }) ?? []
@@ -54,11 +56,27 @@ export default function OnboardingScreen() {
     setErrorMessage('')
   }
 
+  const handleSensorProvisioned = async (provisionedDeviceId: string) => {
+    try {
+      await registerSensor({ device_id: provisionedDeviceId })
+      setDeviceId(provisionedDeviceId)
+      setSensorRegistered(true)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ''
+      if (message.includes('already registered')) {
+        setErrorMessage('Dieser Sensor ist bereits registriert')
+      } else {
+        setErrorMessage('Sensor konnte nicht registriert werden')
+      }
+      throw new Error('Sensor registration failed')
+    }
+  }
+
   const handleRegisterPlant = async () => {
     const trimmedPlantName = selectedSpecies ? selectedSpecies.common_name.trim() : manualPlantName.trim()
     const trimmedDeviceId = deviceId.trim()
 
-    if (!clerkId || !trimmedPlantName || !trimmedDeviceId || isSubmitting) {
+    if (!clerkId || !trimmedPlantName || !sensorRegistered || !trimmedDeviceId || isSubmitting) {
       return
     }
 
@@ -66,7 +84,6 @@ export default function OnboardingScreen() {
     setIsSubmitting(true)
 
     try {
-      await registerSensor({ device_id: trimmedDeviceId })
       await createPlant({
         clerk_id: clerkId,
         device_id: trimmedDeviceId,
@@ -118,6 +135,8 @@ export default function OnboardingScreen() {
               </View>
 
               <View style={styles.form}>
+                <BleProvisioning onProvisioned={handleSensorProvisioned} />
+
                 <View style={styles.field}>
                   <Text style={styles.label}>Pflanze suchen...</Text>
                   <TextInput
@@ -178,28 +197,15 @@ export default function OnboardingScreen() {
                   </View>
                 ) : null}
 
-                <View style={styles.field}>
-                  <Text style={styles.label}>Sensor ID</Text>
-                  <TextInput
-                    value={deviceId}
-                    onChangeText={setDeviceId}
-                    placeholder="fake-sensor-001"
-                    placeholderTextColor={colors.muted}
-                    style={styles.input}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-                </View>
-
                 {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
 
                 <Pressable
                   accessibilityRole="button"
-                  disabled={!(selectedSpecies || (isManualMode && manualPlantName.trim())) || !deviceId.trim() || isSubmitting}
+                  disabled={!(selectedSpecies || (isManualMode && manualPlantName.trim())) || !sensorRegistered || isSubmitting}
                   style={({ pressed }) => [
                     styles.button,
                     (pressed || isSubmitting) && styles.buttonPressed,
-                    (!(selectedSpecies || (isManualMode && manualPlantName.trim())) || !deviceId.trim()) && styles.buttonDisabled,
+                    (!(selectedSpecies || (isManualMode && manualPlantName.trim())) || !sensorRegistered) && styles.buttonDisabled,
                   ]}
                   onPress={handleRegisterPlant}
                 >

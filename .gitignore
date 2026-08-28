@@ -72,3 +72,6 @@ frontend/.next/
 firmware/*.elf
 firmware/*.bin
 
+# Agentic stuff
+PLANTY_HANDOFF.md 
+copilot_instructions.md

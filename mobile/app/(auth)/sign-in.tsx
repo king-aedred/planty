@@ -1,21 +1,21 @@
-import { Colors } from '@/constants/colors'
+import { Logo } from '@/components/brand/logo'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Screen } from '@/components/ui/screen'
+import { SectionLabel } from '@/components/ui/section-label'
+import { TextField } from '@/components/ui/text-field'
 import { type Href, Link, useRouter } from 'expo-router'
 import React from 'react'
-import {
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableWithoutFeedback,
-  View,
-} from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { Keyboard, KeyboardAvoidingView, Platform, ScrollView, TouchableWithoutFeedback } from 'react-native'
+import { Text, XStack, YStack } from 'tamagui'
 
-const colors = Colors.dark
+function getFriendlyErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof TypeError || (error instanceof Error && /network/i.test(error.message))) {
+    return 'Keine Verbindung zum Server. Prüf dein Internet und versuch es noch mal.'
+  }
+
+  return error instanceof Error && error.message ? error.message : fallback
+}
 
 export default function Page() {
   return <SignInContent />
@@ -57,7 +57,13 @@ function SignInContent() {
     return null
   }
 
+  const isSubmitting = fetchStatus === 'fetching'
+
   const handleSubmit = async () => {
+    if (isSubmitting) {
+      return
+    }
+
     setErrorMessage('')
 
     try {
@@ -114,7 +120,7 @@ function SignInContent() {
 
       navigateToHome('/(home)')
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Sign-in fehlgeschlagen.')
+      setErrorMessage(getFriendlyErrorMessage(error, 'Anmeldung fehlgeschlagen. Versuch es noch mal.'))
     }
   }
 
@@ -161,7 +167,7 @@ function SignInContent() {
 
       setErrorMessage(`Verifizierung unerwarteter Status: ${signIn.status ?? 'unbekannt'}`)
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Verifizierung fehlgeschlagen.')
+      setErrorMessage(getFriendlyErrorMessage(error, 'Verifizierung fehlgeschlagen. Versuch es noch mal.'))
     }
   }
 
@@ -174,219 +180,106 @@ function SignInContent() {
   )
 
   return (
-    <SafeAreaView edges={['top']} style={styles.safeArea}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <Screen edges={['top']}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-          <ScrollView
-            style={styles.flex}
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-          >
-            <View style={styles.container}>
-              <View style={styles.card}>
-                <Text style={styles.eyebrow}>Planty</Text>
-                <Text style={styles.title}>Willkommen zurück</Text>
-                <Text style={styles.subtitle}>Melde dich mit deiner E-Mail-Adresse und deinem Passwort an.</Text>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
+            <YStack flex={1} justifyContent="center" padding="$20" gap="$16">
+              <XStack justifyContent="center">
+                <Logo variant="full" size={22} />
+              </XStack>
 
-                <Text style={styles.label}>E-Mail-Adresse</Text>
-                <TextInput
-                  style={styles.input}
-                  autoCapitalize="none"
+              <Card>
+                <SectionLabel>Anmeldung</SectionLabel>
+                <Text fontFamily="$heading" color="$textPrimary" fontSize="$8" marginTop="$4">
+                  Deine Pflanze wartet schon.
+                </Text>
+                <Text fontFamily="$body" color="$textSecondary" fontSize={15} lineHeight={21} marginBottom="$4">
+                  Melde dich an — lange Funkstille mag sie nicht.
+                </Text>
+
+                <TextField
+                  label="E-Mail-Adresse"
                   value={emailAddress}
-                  placeholder="name@beispiel.de"
-                  placeholderTextColor={colors.muted}
                   onChangeText={setEmailAddress}
+                  placeholder="name@beispiel.de"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  textContentType="emailAddress"
                   keyboardType="email-address"
+                  editable={!isSubmitting}
                 />
 
-                <Text style={styles.label}>Passwort</Text>
-                <TextInput
-                  style={styles.input}
+                <TextField
+                  label="Passwort"
                   value={password}
-                  placeholder="Dein Passwort"
-                  placeholderTextColor={colors.muted}
-                  secureTextEntry
                   onChangeText={setPassword}
+                  placeholder="Dein Passwort"
+                  secureTextEntry
+                  autoComplete="current-password"
+                  textContentType="password"
+                  editable={!isSubmitting}
                 />
 
-                {visibleErrors.map((message) => (
-                  <Text key={message} style={styles.error}>
-                    {message}
-                  </Text>
-                ))}
+                {visibleErrors.length > 0 ? (
+                  <YStack gap="$4">
+                    {visibleErrors.map((message) => (
+                      <Text key={message} fontFamily="$body" fontSize={12} color="$critical">
+                        {message}
+                      </Text>
+                    ))}
+                  </YStack>
+                ) : null}
 
                 {verificationStrategy ? (
                   <>
-                    <Text style={styles.label}>Bestätigungscode</Text>
-                    <TextInput
-                      style={styles.input}
+                    <TextField
+                      label="Bestätigungscode"
                       value={verificationCode}
-                      placeholder="6-stelliger Code"
-                      placeholderTextColor={colors.muted}
                       onChangeText={setVerificationCode}
+                      placeholder="6-stelliger Code"
                       keyboardType="number-pad"
+                      autoComplete="one-time-code"
+                      textContentType="oneTimeCode"
+                      editable={!isSubmitting}
                     />
 
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.button,
-                        (!verificationCode || fetchStatus === 'fetching') && styles.buttonDisabled,
-                        pressed && styles.buttonPressed,
-                      ]}
-                      onPress={handleVerify}
-                      disabled={!verificationCode || fetchStatus === 'fetching'}
-                    >
-                      <Text style={styles.buttonText}>Code prüfen</Text>
-                    </Pressable>
+                    <Button onPress={handleVerify} disabled={!verificationCode} loading={isSubmitting}>
+                      Code prüfen
+                    </Button>
 
-                    <Pressable
-                      style={({ pressed }) => [styles.linkButton, pressed && styles.linkButtonPressed]}
+                    <Button
+                      variant="ghost"
                       onPress={() => {
                         setVerificationCode('')
                         setVerificationStrategy(null)
                         setErrorMessage('')
                       }}
                     >
-                      <Text style={styles.linkButtonText}>Zurück zum Passwort</Text>
-                    </Pressable>
+                      Zurück zum Passwort
+                    </Button>
                   </>
-                ) : null}
+                ) : (
+                  <Button onPress={handleSubmit} disabled={!emailAddress || !password} loading={isSubmitting}>
+                    Anmelden
+                  </Button>
+                )}
 
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.button,
-                    (!emailAddress || !password || fetchStatus === 'fetching') && styles.buttonDisabled,
-                    pressed && styles.buttonPressed,
-                  ]}
-                  onPress={handleSubmit}
-                  disabled={!emailAddress || !password || fetchStatus === 'fetching'}
-                >
-                  <Text style={styles.buttonText}>Sign in</Text>
-                </Pressable>
-
-                <View style={styles.linkRow}>
-                  <Text style={styles.linkPrompt}>Noch kein Konto?</Text>
+                <XStack alignItems="center" gap="$4">
+                  <Text fontFamily="$body" fontSize={14} color="$textSecondary">
+                    Noch kein Konto?
+                  </Text>
                   <Link href="/(auth)/sign-up">
-                    <Text style={styles.link}>Sign up</Text>
+                    <Text fontFamily="$body" fontSize={14} fontWeight="700" color="$accent">
+                      Registrieren
+                    </Text>
                   </Link>
-                </View>
-              </View>
-            </View>
+                </XStack>
+              </Card>
+            </YStack>
           </ScrollView>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </Screen>
   )
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  flex: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-    padding: 20,
-    justifyContent: 'center',
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 28,
-    padding: 20,
-    gap: 12,
-  },
-  eyebrow: {
-    color: colors.accent,
-    textTransform: 'uppercase',
-    letterSpacing: 2,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  title: {
-    color: colors.text,
-    fontSize: 30,
-    fontWeight: '800',
-  },
-  subtitle: {
-    color: colors.muted,
-    fontSize: 15,
-    lineHeight: 21,
-    marginBottom: 8,
-  },
-  label: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: colors.text,
-    backgroundColor: colors.background,
-  },
-  button: {
-    backgroundColor: colors.accent,
-    paddingVertical: 14,
-    borderRadius: 16,
-    alignItems: 'center',
-    marginTop: 6,
-  },
-  buttonPressed: {
-    opacity: 0.85,
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    color: colors.accentText,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  linkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 2,
-  },
-  linkPrompt: {
-    color: colors.muted,
-    fontSize: 14,
-  },
-  link: {
-    color: colors.accent,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  error: {
-    color: colors.danger,
-    fontSize: 12,
-    marginTop: -6,
-  },
-  linkButton: {
-    alignItems: 'center',
-    paddingVertical: 10,
-    marginTop: 2,
-  },
-  linkButtonPressed: {
-    opacity: 0.8,
-  },
-  linkButtonText: {
-    color: colors.accent,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-})

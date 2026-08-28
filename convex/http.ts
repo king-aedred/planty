@@ -6,6 +6,51 @@ import { v } from "convex/values";
 
 const http = httpRouter()
 
+export const createSensorLog = mutation({
+    args: {
+        sensor_id: v.string(),
+        cycle_timestamp: v.string(),
+        boot_count: v.number(),
+        battery_voltage: v.optional(v.number()),
+        wifi_connect_ms: v.optional(v.number()),
+        rtc_ok: v.boolean(),
+        rtc_lost_power: v.boolean(),
+        time_sync_ok: v.boolean(),
+        sht40_ok: v.boolean(),
+        bh1750_ok: v.boolean(),
+        readings_sent: v.number(),
+        readings_failed: v.number(),
+        sleep_seconds: v.number(),
+        next_wakeup: v.string(),
+        errors: v.optional(v.string()),
+        prev_error_flags: v.optional(v.number()),
+        prev_wifi_fail_count: v.optional(v.number()),
+        prev_http_fail_count: v.optional(v.number()),
+        prev_last_good_hour: v.optional(v.number()),
+        prev_readings_sent: v.optional(v.number()),
+        prev_battery_voltage: v.optional(v.number()),
+        created_at: v.number(),
+    },
+    handler: async (ctx, args) => {
+        const id = await ctx.db.insert("sensor_logs", args)
+
+        return { ok: true, id }
+    },
+})
+
+export const getSensorLogsBySensor = query({
+    args: {
+        sensor_id: v.string(),
+    },
+    handler: async (ctx, args) => {
+        return await ctx.db
+            .query("sensor_logs")
+            .withIndex("by_sensor_and_time", (q) => q.eq("sensor_id", args.sensor_id))
+            .order("desc")
+            .take(20)
+    },
+})
+
 export const createReading = mutation({
     args: {
         sensor_id: v.string(),
@@ -36,6 +81,99 @@ export const getReadings = query({
     handler: async (ctx) => {
         return await ctx.db.query("readings").collect()
     },
+})
+
+function isSensorLogBody(
+    value: unknown,
+): value is {
+    sensor_id: string
+    cycle_timestamp: string
+    boot_count: number
+    battery_voltage?: number
+    wifi_connect_ms?: number
+    rtc_ok: boolean
+    rtc_lost_power: boolean
+    time_sync_ok: boolean
+    sht40_ok: boolean
+    bh1750_ok: boolean
+    readings_sent: number
+    readings_failed: number
+    sleep_seconds: number
+    next_wakeup: string
+    errors?: string
+    prev_error_flags?: number
+    prev_wifi_fail_count?: number
+    prev_http_fail_count?: number
+    prev_last_good_hour?: number
+    prev_readings_sent?: number
+    prev_battery_voltage?: number
+} {
+  if (typeof value !== "object" || value === null) {
+    return false
+  }
+
+  const body = value as Record<string, unknown>
+
+  return (
+    typeof body.sensor_id === "string" &&
+    typeof body.cycle_timestamp === "string" &&
+    typeof body.boot_count === "number" && Number.isFinite(body.boot_count) &&
+    (body.battery_voltage === undefined || (typeof body.battery_voltage === "number" && Number.isFinite(body.battery_voltage))) &&
+    (body.wifi_connect_ms === undefined || (typeof body.wifi_connect_ms === "number" && Number.isFinite(body.wifi_connect_ms))) &&
+    typeof body.rtc_ok === "boolean" &&
+    typeof body.rtc_lost_power === "boolean" &&
+    typeof body.time_sync_ok === "boolean" &&
+    typeof body.sht40_ok === "boolean" &&
+    typeof body.bh1750_ok === "boolean" &&
+    typeof body.readings_sent === "number" && Number.isFinite(body.readings_sent) &&
+    typeof body.readings_failed === "number" && Number.isFinite(body.readings_failed) &&
+    typeof body.sleep_seconds === "number" && Number.isFinite(body.sleep_seconds) &&
+    typeof body.next_wakeup === "string" &&
+    (body.errors === undefined || typeof body.errors === "string") &&
+    (body.prev_error_flags === undefined || (typeof body.prev_error_flags === "number" && Number.isFinite(body.prev_error_flags))) &&
+    (body.prev_wifi_fail_count === undefined || (typeof body.prev_wifi_fail_count === "number" && Number.isFinite(body.prev_wifi_fail_count))) &&
+    (body.prev_http_fail_count === undefined || (typeof body.prev_http_fail_count === "number" && Number.isFinite(body.prev_http_fail_count))) &&
+    (body.prev_last_good_hour === undefined || (typeof body.prev_last_good_hour === "number" && Number.isFinite(body.prev_last_good_hour))) &&
+    (body.prev_readings_sent === undefined || (typeof body.prev_readings_sent === "number" && Number.isFinite(body.prev_readings_sent))) &&
+    (body.prev_battery_voltage === undefined || (typeof body.prev_battery_voltage === "number" && Number.isFinite(body.prev_battery_voltage)))
+  )
+}
+
+http.route({
+    path: "/logs",
+    method: "POST",
+    handler: httpAction(async (ctx, request) => {
+        try {
+            const body: unknown = await request.json()
+
+            if (!isSensorLogBody(body)) {
+                return new Response(
+                    JSON.stringify({
+                        error: "Request body must contain sensor_id and sensor log fields",
+                    }),
+                    {
+                        status: 400,
+                        headers: { "Content-Type": "application/json" },
+                    },
+                )
+            }
+
+            const result = await ctx.runMutation(api.http.createSensorLog, {
+                ...body,
+                created_at: Date.now(),
+            })
+
+            return new Response(JSON.stringify({ ok: true, id: result.id }), {
+                status: 201,
+                headers: { "Content-Type": "application/json" },
+            })
+        } catch {
+            return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+                status: 400,
+                headers: { "Content-Type": "application/json" },
+            })
+        }
+    }),
 })
 
 // überprüft ob es sich tatsächlich um einen Reader Body handelt, wenn ja ist der rückgabewert entsprehen value is ...

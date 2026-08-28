@@ -62,7 +62,7 @@ type ProbeAttempt = {
   status?: number
 }
 
-type DevTab = 'single' | 'multi' | 'timeTravel'
+type DevTab = 'single' | 'multi' | 'timeTravel' | 'sensorLogs'
 
 type ScenarioKey =
   | 'normal'
@@ -85,6 +85,32 @@ type SensorPlant = {
   id: string
   name: string
   deviceId: string
+}
+
+type SensorLogEntry = {
+  _id: string
+  sensor_id: string
+  cycle_timestamp: string
+  boot_count: number
+  battery_voltage?: number | null
+  wifi_connect_ms?: number | null
+  rtc_ok: boolean
+  rtc_lost_power: boolean
+  time_sync_ok: boolean
+  sht40_ok: boolean
+  bh1750_ok: boolean
+  readings_sent: number
+  readings_failed: number
+  sleep_seconds: number
+  next_wakeup: string
+  errors?: string | null
+  prev_error_flags?: number | null
+  prev_wifi_fail_count?: number | null
+  prev_http_fail_count?: number | null
+  prev_last_good_hour?: number | null
+  prev_readings_sent?: number | null
+  prev_battery_voltage?: number | null
+  created_at: number
 }
 
 export default function DevModeScreen() {
@@ -145,6 +171,11 @@ export default function DevModeScreen() {
     () => sensorPlants.find((plant) => plant.id === selectedSinglePlantId) ?? sensorPlants[0] ?? null,
     [sensorPlants, selectedSinglePlantId],
   )
+
+  const sensorLogs = useQuery(
+    api.http.getSensorLogsBySensor,
+    selectedSinglePlant?.deviceId ? { sensor_id: selectedSinglePlant.deviceId } : 'skip',
+  ) as SensorLogEntry[] | undefined
 
   useEffect(() => {
     if (sensorPlants.length === 0) {
@@ -725,6 +756,7 @@ export default function DevModeScreen() {
               <TabButton label="Single Sensor" active={activeTab === 'single'} onPress={() => setActiveTab('single')} />
               <TabButton label="Multi Sensor" active={activeTab === 'multi'} onPress={() => setActiveTab('multi')} />
               <TabButton label="⏰ Zeitreise" active={activeTab === 'timeTravel'} onPress={() => setActiveTab('timeTravel')} />
+              <TabButton label="📋 Sensor Logs" active={activeTab === 'sensorLogs'} onPress={() => setActiveTab('sensorLogs')} />
             </View>
 
             {activeTab === 'single' ? (
@@ -932,6 +964,44 @@ export default function DevModeScreen() {
               />
             ) : null}
 
+            {activeTab === 'sensorLogs' ? (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Sensor Logs</Text>
+                <Text style={styles.helperText}>Zeigt die letzten 20 Logs für den aktuell ausgewählten Sensor.</Text>
+
+                <View style={styles.resultPanel}>
+                  <Text style={styles.resultTitle}>Letzte Einträge</Text>
+                  {selectedSinglePlant?.deviceId ? (
+                    sensorLogs && sensorLogs.length > 0 ? (
+                      <View style={styles.resultList}>
+                        {sensorLogs.map((log) => {
+                          const logErrors = translateSensorLogErrors(log)
+
+                          return (
+                            <View key={log._id} style={styles.resultCard}>
+                              <View style={styles.resultHeader}>
+                                <Text style={styles.resultDeviceTitle}>{formatLogTime(log.created_at)}</Text>
+                                <Text style={styles.resultDeviceId}>{log.sensor_id}</Text>
+                              </View>
+                              <Text style={styles.value}>{`Readings Sent: ${log.readings_sent}`}</Text>
+                              <Text style={logErrors.length > 0 ? styles.error : styles.success}>
+                                {logErrors.length > 0 ? logErrors.join(' · ') : 'Keine Fehler'}
+                              </Text>
+                              <Text style={styles.resultMeta}>{`Batterie: ${log.battery_voltage ?? 'n/a'} V`}</Text>
+                            </View>
+                          )
+                        })}
+                      </View>
+                    ) : (
+                      <Text style={styles.helperText}>Keine Logs gefunden.</Text>
+                    )
+                  ) : (
+                    <Text style={styles.helperText}>Wähle zuerst einen Sensor aus.</Text>
+                  )}
+                </View>
+              </View>
+            ) : null}
+
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Dev Infos</Text>
               <InfoRow label="Backend URL" value={serverBaseUrl ?? 'Suche…'} />
@@ -1000,6 +1070,28 @@ function TabButton({
       <Text style={active ? styles.tabButtonTextActive : styles.tabButtonText}>{label}</Text>
     </Pressable>
   )
+}
+
+function formatLogTime(timestamp: number) {
+  return new Intl.DateTimeFormat('de-DE', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(new Date(timestamp))
+}
+
+function translateSensorLogErrors(log: SensorLogEntry) {
+  const errors: string[] = []
+
+  if (!log.rtc_ok) errors.push('RTC')
+  if (log.rtc_lost_power) errors.push('RTC Power Loss')
+  if (!log.time_sync_ok) errors.push('Time Sync')
+  if (!log.sht40_ok) errors.push('SHT40')
+  if (!log.bh1750_ok) errors.push('BH1750')
+  if (log.readings_failed > 0) errors.push(`Fehlende Readings: ${log.readings_failed}`)
+  if (log.errors) errors.push(log.errors)
+
+  return errors
 }
 
 const styles = StyleSheet.create({
