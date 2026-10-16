@@ -3,8 +3,33 @@ import { httpAction, mutation, query } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
+import { authenticateDevice, claimDeviceHttp, jsonResponse } from "./devices";
+import type { DeviceAuth } from "./devices";
+import { readingsBatchHttp } from "./device_readings";
+import { ackCommandHttp, getCommandsHttp } from "./device_commands";
+import { firmwareAdminUploadHttp, firmwareFileHttp, firmwareLatestHttp } from "./firmware";
 
 const http = httpRouter()
+
+// Bearer-Prüfung für die v6-Endpoints /readings und /logs.
+// - Token gültig: verarbeiten, sensor_id muss zum Token-Gerät passen (sonst 403).
+// - Token ungültig oder durch neueren Claim ersetzt: 401. Einziger Fall für 401,
+//   denn auf 401 löscht das Gerät sein Token.
+// - Header fehlt: TEMPORÄR wie bisher verarbeiten, solange v6-Geräte ohne Header laufen.
+//   Entfernen, sobald alle Geräte Firmware v7 haben.
+const rejectDeviceAuth = (auth: DeviceAuth): Response | null => {
+    if (auth.kind === "invalid") {
+        console.warn("[convex/http] device token rejected")
+        return jsonResponse(401, { error: "unauthorized" })
+    }
+    if (auth.kind === "malformed") {
+        return jsonResponse(400, { error: "invalid_authorization_header" })
+    }
+    return null
+}
+
+const rejectSensorMismatch = (auth: DeviceAuth, sensorId: string): Response | null =>
+    auth.kind === "ok" && auth.device_id !== sensorId ? jsonResponse(403, { error: "device_mismatch" }) : null
 
 export const createSensorLog = mutation({
     args: {
@@ -89,11 +114,22 @@ export const hello = mutation({
             .first()
 
         if (sensor) {
+            const reset = sensor.reset_requested === true
             await ctx.db.patch(sensor._id, {
                 last_seen: now,
                 status: "active",
+                ...(reset
+                    ? {
+                        reset_requested: false,
+                        clerk_id: undefined,
+                        claimed_at: undefined,
+                    }
+                    : {}),
             })
-            return { ok: true, device_id: args.device_id }
+            // TODO: Testfunktion. Wird später zur vollwertigen
+            // "Sensor entfernen"-Funktion ausgebaut (siehe
+            // docs/planty_projektbeschreibung.md).
+            return { ok: true, device_id: args.device_id, ...(reset ? { reset: true } : {}) }
         }
 
         await ctx.db.insert("sensors", {
@@ -223,6 +259,12 @@ http.route({
     path: "/logs",
     method: "POST",
     handler: httpAction(async (ctx, request) => {
+        const auth = await authenticateDevice(ctx, request)
+        const authError = rejectDeviceAuth(auth)
+        if (authError) {
+            return authError
+        }
+
         try {
             const body: unknown = await request.json()
 
@@ -236,6 +278,11 @@ http.route({
                         headers: { "Content-Type": "application/json" },
                     },
                 )
+            }
+
+            const mismatch = rejectSensorMismatch(auth, body.sensor_id)
+            if (mismatch) {
+                return mismatch
             }
 
             const result = await ctx.runMutation(api.http.createSensorLog, {
@@ -290,6 +337,12 @@ http.route({ //reagiert auf POSTs auf /readings
     path: "/readings",
     method: "POST",
     handler: httpAction(async (ctx, request) => {
+        const auth = await authenticateDevice(ctx, request)
+        const authError = rejectDeviceAuth(auth)
+        if (authError) {
+            return authError
+        }
+
         try {
             const body: unknown = await request.json();
 
@@ -308,6 +361,21 @@ http.route({ //reagiert auf POSTs auf /readings
                         headers: { "Content-Type": "application/json" },
                     },
                 )
+            }
+
+            const mismatch = rejectSensorMismatch(auth, body.sensor_id)
+            if (mismatch) {
+                return mismatch
+            }
+
+            // v7-Geräte, die schon /readings/batch senden, werden dort ausgewertet. Über /readings würden sie
+            // doppelt ausgewertet und bei unvollständigen Sessions in den alten Sensor-Problem-Webhook laufen.
+            // Annehmen (201, damit das Gerät nichts verwirft), aber nicht speichern und keine Session anlegen.
+            if (auth.kind === "ok" && (await ctx.runQuery(internal.sensor_alerts.isBatchDevice, { device_id: auth.device_id }))) {
+                return new Response(JSON.stringify({ ok: true, ignored: "batch_device" }), {
+                    status: 201,
+                    headers: { "Content-Type": "application/json" },
+                })
             }
 
             const sensorDate = body.timestamp.substring(0, 10)
@@ -392,6 +460,52 @@ http.route({
            headers: { "Content-Type": "application/json" },  
         })
     }),
+})
+
+// Firmware v7: ein Request pro Messzyklus, Bearer-Token Pflicht (siehe convex/device_readings.ts).
+http.route({
+    path: "/readings/batch",
+    method: "POST",
+    handler: readingsBatchHttp,
+})
+
+// Firmware v7 Abschnitt 6: Befehle abholen und quittieren (Bearer, siehe convex/device_commands.ts).
+http.route({
+    path: "/device/commands",
+    method: "GET",
+    handler: getCommandsHttp,
+})
+
+http.route({
+    path: "/device/commands/ack",
+    method: "POST",
+    handler: ackCommandHttp,
+})
+
+// Firmware v7 Abschnitt 7: OTA (siehe convex/firmware.ts). Datei über denselben Host wie die API.
+http.route({
+    path: "/firmware/latest",
+    method: "GET",
+    handler: firmwareLatestHttp,
+})
+
+http.route({
+    pathPrefix: "/firmware/file/",
+    method: "GET",
+    handler: firmwareFileHttp,
+})
+
+http.route({
+    path: "/firmware/admin/releases",
+    method: "POST",
+    handler: firmwareAdminUploadHttp,
+})
+
+// Firmware v7: Gerät meldet sich nach dem BLE-Onboarding mit dem Claim-Token (siehe convex/devices.ts).
+http.route({
+    path: "/device/claim",
+    method: "POST",
+    handler: claimDeviceHttp,
 })
 
 const daysBetween = (leftDate: string, rightDate: string): number => {

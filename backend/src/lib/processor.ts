@@ -10,17 +10,19 @@ import {
 } from './analysis.js'
 
 
+// Temperatur und Licht fehlen (undefined), wenn die Session keine gültigen Werte dafür hatte
+// (Firmware v7 sendet null bei ausgefallenem Sensor). Die Feuchte ist immer vorhanden.
 export type ProcessSessionSummary = {
     sensor_id: string
     session_id: string
     date: string
     moisture_median: number
-    temperature_median: number
-    light_level_median: number
+    temperature_median?: number
+    light_level_median?: number
     battery_voltage_median?: number | null
     moisture_state: 'critical' | 'warning' | 'ok'
-    temperature_state: 'cold' | 'ok' | 'hot'
-    light_state: 'dark' | 'ok' | 'bright'
+    temperature_state?: 'cold' | 'ok' | 'hot'
+    light_state?: 'dark' | 'ok' | 'bright'
     created_at: number
 }
 
@@ -31,10 +33,13 @@ export type ProcessSessionResult =
 
 type Reading = {
     moisture: number
-    temperature: number
-    light_level: number
+    temperature?: number
+    light_level?: number
     battery_voltage?: number
 }
+
+const numbersOnly = (values: (number | undefined)[]): number[] =>
+    values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
 
 type SessionLookup = {
     _id: string
@@ -48,12 +53,12 @@ type SessionSummaryLookup = {
     session_id: string
     date: string
     moisture_median: number
-    temperature_median: number
-    light_level_median: number
+    temperature_median?: number
+    light_level_median?: number
     battery_voltage_median?: number | null
     moisture_state: 'critical' | 'warning' | 'ok'
-    temperature_state: 'cold' | 'ok' | 'hot'
-    light_state: 'dark' | 'ok' | 'bright'
+    temperature_state?: 'cold' | 'ok' | 'hot'
+    light_state?: 'dark' | 'ok' | 'bright'
     created_at: number
 }
 
@@ -90,10 +95,11 @@ const getMessageState = (summary: ProcessSessionSummary): MessageState => {
         return 'critical'
     }
 
+    // Fehlende Dimension (kein Messwert) gilt als unauffällig: keine Warnung über Temperatur oder Licht.
     if (
         summary.moisture_state !== 'ok' ||
-        summary.temperature_state !== 'ok' ||
-        summary.light_state !== 'ok'
+        (summary.temperature_state ?? 'ok') !== 'ok' ||
+        (summary.light_state ?? 'ok') !== 'ok'
     ) {
         return 'warning'
     }
@@ -234,7 +240,7 @@ const createInboxMessage = async (
             clerk_id: plant.clerk_id,
             backend_secret: CONVEX_BACKEND_SECRET,
         })) as number
-        const notificationLimit = user?.max_notifications_per_day ?? 3
+        const notificationLimit = user?.max_notifications_per_day ?? 1
 
         if (notificationCount >= notificationLimit) {
             console.log('[processor] Notification limit reached, skipping inbox message', {
@@ -273,8 +279,9 @@ const createInboxMessage = async (
         character: plantCharacter,
         is_thank_you: options.is_thank_you ?? false,
         moisture_state: summary.moisture_state,
-        temperature_state: summary.temperature_state,
-        light_state: summary.light_state,
+        // Ohne Messwert 'ok', damit n8n nichts über diese Dimension schreibt.
+        temperature_state: summary.temperature_state ?? 'ok',
+        light_state: summary.light_state ?? 'ok',
         notification_rules: {
             ok: [],
             warning: [],
@@ -411,11 +418,9 @@ export const processSessionIfReady = async (
     })) as SessionSummaryLookup | null
 
     const moistureValues = readings.map((reading) => reading.moisture)
-    const temperatureValues = readings.map((reading) => reading.temperature)
-    const lightValues = readings.map((reading) => reading.light_level)
-    const batteryVoltageValues = readings
-        .map((reading) => reading.battery_voltage)
-        .filter((batteryVoltage): batteryVoltage is number => typeof batteryVoltage === 'number')
+    const temperatureValues = numbersOnly(readings.map((reading) => reading.temperature))
+    const lightValues = numbersOnly(readings.map((reading) => reading.light_level))
+    const batteryVoltageValues = numbersOnly(readings.map((reading) => reading.battery_voltage))
     const plantThresholds = (await convex.query(api.plants.getPlantThresholds, {
         device_id: session.sensor_id,
         backend_secret: CONVEX_BACKEND_SECRET,
@@ -429,8 +434,9 @@ export const processSessionIfReady = async (
     }
 
     const moistureMedian = calculateMedian(moistureValues)
-    const temperatureMedian = calculateMedian(temperatureValues)
-    const lightMedian = calculateMedian(lightValues)
+    // calculateMedian wirft bei leeren Arrays: Dimensionen ohne Werte werden übersprungen.
+    const temperatureMedian = temperatureValues.length > 0 ? calculateMedian(temperatureValues) : undefined
+    const lightMedian = lightValues.length > 0 ? calculateMedian(lightValues) : undefined
     const batteryVoltageMedian = batteryVoltageValues.length > 0 ? calculateMedian(batteryVoltageValues) : null
 
     console.log('[processor] medians calculated', {
@@ -452,16 +458,22 @@ export const processSessionIfReady = async (
             plantThresholds.moisture_critical ?? DEFAULT_THRESHOLDS.moisture_critical,
             plantThresholds.moisture_warning ?? DEFAULT_THRESHOLDS.moisture_warning,
         ),
-        temperature_state: getTemperatureStateCustom(
-            temperatureMedian,
-            plantThresholds.temperature_min ?? DEFAULT_THRESHOLDS.temperature_min,
-            plantThresholds.temperature_max ?? DEFAULT_THRESHOLDS.temperature_max,
-        ),
-        light_state: getLightStateCustom(
-            lightMedian,
-            plantThresholds.light_min ?? DEFAULT_THRESHOLDS.light_min,
-            plantThresholds.light_max ?? DEFAULT_THRESHOLDS.light_max,
-        ),
+        temperature_state:
+            temperatureMedian === undefined
+                ? undefined
+                : getTemperatureStateCustom(
+                      temperatureMedian,
+                      plantThresholds.temperature_min ?? DEFAULT_THRESHOLDS.temperature_min,
+                      plantThresholds.temperature_max ?? DEFAULT_THRESHOLDS.temperature_max,
+                  ),
+        light_state:
+            lightMedian === undefined
+                ? undefined
+                : getLightStateCustom(
+                      lightMedian,
+                      plantThresholds.light_min ?? DEFAULT_THRESHOLDS.light_min,
+                      plantThresholds.light_max ?? DEFAULT_THRESHOLDS.light_max,
+                  ),
         created_at: Date.now(),
     }
 
@@ -471,8 +483,9 @@ export const processSessionIfReady = async (
         previousSummary && moistureMedian > previousSummary.moisture_median + 15,
     )
 
+    // undefined-Felder weglassen (fehlende Dimensionen werden nicht gespeichert).
     await convex.mutation(api.readings.createSessionSummary, {
-        ...summaryPayload,
+        ...Object.fromEntries(Object.entries(summaryPayload).filter(([, value]) => value !== undefined)),
         ...(battery_voltage_median === null ? {} : { battery_voltage_median }),
         backend_secret: CONVEX_BACKEND_SECRET,
     })

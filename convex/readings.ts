@@ -390,23 +390,28 @@ export const createSessionSummary = mutation({
     session_id: v.id("sensor_sessions"),
     date: v.string(),
     moisture_median: v.number(),
-    temperature_median: v.number(),
-    light_level_median: v.number(),
+    // Fehlen, wenn die Session keine Temperatur- bzw. Lichtwerte hatte (Firmware v7, Sensor ausgefallen).
+    temperature_median: v.optional(v.number()),
+    light_level_median: v.optional(v.number()),
     battery_voltage_median: v.optional(v.number()),
     moisture_state: v.union(
       v.literal("critical"),
       v.literal("warning"),
       v.literal("ok"),
     ),
-    temperature_state: v.union(
-      v.literal("cold"),
-      v.literal("ok"),
-      v.literal("hot"),
+    temperature_state: v.optional(
+      v.union(
+        v.literal("cold"),
+        v.literal("ok"),
+        v.literal("hot"),
+      ),
     ),
-    light_state: v.union(
-      v.literal("dark"),
-      v.literal("ok"),
-      v.literal("bright"),
+    light_state: v.optional(
+      v.union(
+        v.literal("dark"),
+        v.literal("ok"),
+        v.literal("bright"),
+      ),
     ),
     backend_secret: v.string(),
   },

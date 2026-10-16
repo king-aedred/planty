@@ -1,6 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
+import { releaseSensor } from "./device_commands";
 
 const sensorStatusValue = v.union(
   v.literal("active"),
@@ -162,37 +163,25 @@ export const getSensorsByClerkId = query({
   },
 });
 
-export const claimSensor = mutation({
+export const requestSensorReset = mutation({
   args: {
     device_id: v.string(),
   },
   handler: async (ctx, args) => {
+    // Gleiche Freigabe wie device_commands.removeSensor: Besitz, Pflanzen und device_token_hash
+    // werden sofort gelöst. v7-Geräte bekommen beim nächsten Kontakt 401, v6-Geräte das reset über /hello.
     const identity = await requireAuthenticatedUser(ctx);
-
-    const existingSensor = await ctx.db
+    const sensor = await ctx.db
       .query("sensors")
       .withIndex("by_device_id", (q) => q.eq("device_id", args.device_id))
       .first();
 
-    if (!existingSensor) {
-      throw new Error("Sensor wurde noch nicht online gesehen");
+    if (!sensor || sensor.clerk_id !== identity.subject) {
+      throw new Error("Unauthorized");
     }
 
-    if (existingSensor.clerk_id && existingSensor.clerk_id !== identity.subject) {
-      throw new Error("Sensor gehört bereits einem anderen User");
-    }
-
-    if (existingSensor.clerk_id === identity.subject) {
-      return existingSensor._id;
-    }
-
-    await ctx.db.patch(existingSensor._id, {
-      clerk_id: identity.subject,
-      claimed_at: Date.now(),
-    });
-
-    // TODO Sicherheit: Aktuell kann jeder eingeloggte User jede noch freie device_id claimen. IDs sind aus der MAC abgeleitet und damit erratbar. Später: Claim-Secret, das das Gerät per BLE ausliefert, gegen device_credentials prüfen (siehe docs/planty_projektbeschreibung.md §7).
-    return existingSensor._id;
+    await releaseSensor(ctx, sensor, "sensor_removed");
+    return { ok: true } as const;
   },
 });
 

@@ -37,7 +37,9 @@ const triggerN8nSensorProblem = async (payload: {
   notification_rules: NotificationRules
   telegram_chat_id: string | null
   expo_push_token: string | null
-}): Promise<void> => {
+  // Standard 'offline' wie bisher; Hinweise aus convex/sensor_alerts.ts setzen eigene Werte.
+  state?: string
+}): Promise<number | null> => {
   try {
     const response = await fetch(N8N_SYSTEM_WEBHOOK_URL, {
       method: 'POST',
@@ -48,7 +50,7 @@ const triggerN8nSensorProblem = async (payload: {
         clerk_id: payload.clerk_id,
         device_id: payload.device_id,
         plant_name: payload.plant_name,
-        state: 'offline',
+        state: payload.state ?? 'offline',
         message: payload.message,
         notification_rules: payload.notification_rules,
         telegram_chat_id: payload.telegram_chat_id,
@@ -61,9 +63,48 @@ const triggerN8nSensorProblem = async (payload: {
       const responseText = await response.text().catch(() => '')
       console.error('[sensor/problem] n8n webhook failed', response.status, responseText)
     }
+    return response.status
   } catch (error) {
     console.error('[sensor/problem] n8n webhook unreachable', error)
+    return null
   }
+}
+
+// Offline- und Akku-Hinweise aus convex/sensor_alerts.ts. Convex hat Erkennung, Tageslimit,
+// Kontaktzeitfenster und Inbox-Nachricht schon erledigt; hier nur die Weiterleitung an n8n,
+// weil der n8n-System-Webhook nur lokal erreichbar ist.
+export const handleSensorAlert = async (input: {
+  clerk_id: string
+  device_id: string
+  plant_name: string
+  state: string
+  message: string
+}): Promise<{ statusCode: 200 | 404 | 502; body: Record<string, unknown> }> => {
+  const api = anyApi
+
+  const user = (await convex.query(api.users.getUserByClerkIdForProcessor, {
+    clerk_id: input.clerk_id,
+  })) as UserLookup | null
+
+  if (!user) {
+    return { statusCode: 404, body: { error: 'User not found' } }
+  }
+
+  const n8nStatus = await triggerN8nSensorProblem({
+    clerk_id: input.clerk_id,
+    device_id: input.device_id,
+    plant_name: input.plant_name,
+    message: input.message,
+    state: input.state,
+    notification_rules: user.notification_rules ?? defaultNotificationRules(),
+    telegram_chat_id: user.telegram_chat_id ?? null,
+    expo_push_token: user.expo_push_token ?? null,
+  })
+
+  console.log('[sensor/alert] forwarded', { device_id: input.device_id, state: input.state, n8n_status: n8nStatus })
+
+  const delivered = n8nStatus !== null && n8nStatus >= 200 && n8nStatus < 300
+  return { statusCode: delivered ? 200 : 502, body: { status: delivered ? 'ok' : 'n8n_failed', n8n_status: n8nStatus } }
 }
 
 export const handleSensorProblem = async (input: {

@@ -154,7 +154,7 @@ export const createUser = mutation({
       email: args.email,
       plan: "basic",
       is_dev: false,
-      max_notifications_per_day: 3,
+      max_notifications_per_day: 1,
       created_at: Date.now(),
     });
 

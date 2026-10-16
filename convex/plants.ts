@@ -153,6 +153,16 @@ export const createPlant = mutation({
     }
 
     if (args.device_id) {
+      // Sensoren werden nur noch über POST /device/claim zugeordnet (Firmware v7).
+      const sensor = await ctx.db
+        .query("sensors")
+        .withIndex("by_device_id", (q) => q.eq("device_id", args.device_id ?? ""))
+        .first();
+
+      if (!sensor || sensor.clerk_id !== args.clerk_id) {
+        throw new Error("Sensor not owned by user");
+      }
+
       const plants = (await ctx.db.query("plants").collect()) as Doc<"plants">[];
       const duplicatePlant = plants.find(
         (plant) => plant.device_id === args.device_id || plant.sensor_id === args.device_id,
@@ -243,6 +253,12 @@ export const incrementCriticalDays = mutation({
 
     if (!plant) {
       return 0;
+    }
+
+    // Firmware v7 liefert eine Auswertung pro Messzyklus, also mehrmals am Tag.
+    // Ein Tag zählt nur einmal; ohne diese Prüfung fiele der Zähler auf 1 zurück.
+    if (plant.last_critical_date === args.date) {
+      return plant.consecutive_critical_days ?? 1;
     }
 
     const yesterday = getYesterdayDate(args.date);
