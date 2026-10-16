@@ -17,7 +17,6 @@ export default function OnboardingScreen() {
   const { useUser } = require('@clerk/expo') as typeof import('@clerk/expo')
   const { user } = useUser()
   const router = useRouter()
-  const claimSensor = useMutation(api.sensors.claimSensor)
   const createPlant = useMutation(api.plants.createPlant)
 
   const clerkId = user?.id ?? ''
@@ -56,20 +55,10 @@ export default function OnboardingScreen() {
     setErrorMessage('')
   }
 
+  // Der Sensor hat sich bereits selbst per POST /device/claim diesem Konto zugeordnet.
   const handleSensorProvisioned = async (provisionedDeviceId: string) => {
-    try {
-      await claimSensor({ device_id: provisionedDeviceId })
-      setDeviceId(provisionedDeviceId)
-      setSensorRegistered(true)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : ''
-      if (message.includes('already registered')) {
-        setErrorMessage('Dieser Sensor ist bereits registriert')
-      } else {
-        setErrorMessage('Sensor konnte nicht registriert werden')
-      }
-      throw new Error('Sensor registration failed')
-    }
+    setDeviceId(provisionedDeviceId)
+    setSensorRegistered(true)
   }
 
   const handleRegisterPlant = async () => {

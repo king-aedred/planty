@@ -15,6 +15,7 @@ type TextFieldProps = {
   autoComplete?: TextInputProps['autoComplete']
   textContentType?: TextInputProps['textContentType']
   keyboardType?: TextInputProps['keyboardType']
+  inputRef?: { current: { focus: () => void } | null }
 }
 
 export function TextField({
@@ -29,6 +30,7 @@ export function TextField({
   autoComplete,
   textContentType,
   keyboardType,
+  inputRef,
 }: TextFieldProps) {
   const theme = useTheme()
   const [isFocused, setIsFocused] = useState(false)
@@ -50,6 +52,11 @@ export function TextField({
         paddingHorizontal="$12"
       >
         <Input
+          ref={(instance) => {
+            if (inputRef) {
+              inputRef.current = instance as unknown as { focus: () => void } | null
+            }
+          }}
           unstyled
           flex={1}
           fontFamily="$body"

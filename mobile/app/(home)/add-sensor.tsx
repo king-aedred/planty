@@ -1,5 +1,3 @@
-import { api } from '../../../convex/_generated/api'
-import { useMutation } from 'convex/react'
 import { useRouter } from 'expo-router'
 import { Alert, SafeAreaView, StyleSheet, Text, View } from 'react-native'
 import BurgerMenu from '../../components/burger-menu'
@@ -10,10 +8,7 @@ const colors = Colors.dark
 
 export default function AddSensorScreen() {
   const router = useRouter()
-  const claimSensor = useMutation(api.sensors.claimSensor)
-
   const handleProvisioned = async (deviceId: string) => {
-    await claimSensor({ device_id: deviceId })
     Alert.alert(
       'Sensor ist bereit',
       'Möchtest du gleich eine Pflanze zuordnen?',

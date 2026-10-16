@@ -49,7 +49,6 @@ export default function AddPlantScreen() {
   const plants = useQuery(api.plants.getAllPlantsByClerkId, clerkId ? { clerk_id: clerkId } : 'skip')
   const sensors = useQuery(api.sensors.getSensorsByClerkId, clerkId ? {} : 'skip')
   const speciesResults = useQuery(api.plant_species.searchPlantSpecies, { search: speciesSearch }) ?? []
-  const claimSensor = useMutation(api.sensors.claimSensor)
   const createPlant = useMutation(api.plants.createPlant)
   const transferSensor = useMutation(api.plants.transferSensor)
   const deletePlant = useMutation(api.plants.deletePlant)
@@ -129,7 +128,6 @@ export default function AddPlantScreen() {
     setIsSubmitting(true)
 
     try {
-      await claimSensor({ device_id: trimmedDeviceId })
       await createPlant({
         clerk_id: clerkId,
         device_id: trimmedDeviceId,

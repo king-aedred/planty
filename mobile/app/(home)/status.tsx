@@ -1,10 +1,12 @@
 import { Colors } from '@/constants/colors'
 import { api } from '../../../convex/_generated/api'
 import BurgerMenu from '../../components/burger-menu'
-import { useQuery } from 'convex/react'
+import { useMutation, useQuery } from 'convex/react'
+import { useDeviceCommand } from '@/hooks/use-device-command'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useEffect, useMemo, useState } from 'react'
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -61,16 +63,18 @@ const METRIC_CONFIGS = {
   },
 } satisfies Record<MetricKey, MetricConfig>
 
+// Temperatur und Licht fehlen, wenn der jeweilige Sensor ausgefallen ist.
 type HistoricalSummary = {
   date: string
   moisture_median: number
-  temperature_median: number
-  light_level_median: number
+  temperature_median?: number
+  light_level_median?: number
 }
 
+// null: kein Wert an diesem Tag. Die Linie wird dort unterbrochen statt bei 0 gezeichnet.
 type ChartPoint = {
   day: string
-  value: number
+  value: number | null
 }
 
 type TooltipState = {
@@ -87,7 +91,7 @@ type MetricConfig = {
   lineColor: string
   domain: [number, number]
   tickValues: number[]
-  getValue: (summary: HistoricalSummary) => number
+  getValue: (summary: HistoricalSummary) => number | undefined
   formatValue: (value: number) => string
 }
 
@@ -203,14 +207,15 @@ export default function StatusScreen() {
     () =>
       visibleSummaries.map((summary) => ({
         day: formatDayLabel(summary.date),
-        value: activeMetricConfig.getValue(summary),
+        value: activeMetricConfig.getValue(summary) ?? null,
       })),
     [activeMetricConfig, visibleSummaries],
   )
+  const hasChartValues = chartData.some((point) => point.value !== null)
 
   const chartPress = useChartPressState({
     x: chartData[0]?.day ?? '',
-    y: { value: chartData[0]?.value ?? 0 },
+    y: { value: chartData.find((point) => point.value !== null)?.value ?? 0 },
   })
   const [tooltipState, setTooltipState] = useState<TooltipState>(null)
 
@@ -291,6 +296,8 @@ export default function StatusScreen() {
 
             {resolvedPlant.deviceId ? (
               <>
+                <SensorActions deviceId={resolvedPlant.deviceId} onRemoved={() => router.replace('/(home)/plant-list')} />
+
                 <View style={styles.cardGrid}>
                   {latestSummary ? (
                     <>
@@ -301,20 +308,28 @@ export default function StatusScreen() {
                         badgeLabel={latestSummary.moisture_state}
                         badgeTone={moistureTone(latestSummary.moisture_state)}
                       />
-                      <MetricCard
-                        emoji="🌡️"
-                        title="Lufttemperatur"
-                        value={`${formatValue(latestSummary.temperature_median)} °C`}
-                        badgeLabel={latestSummary.temperature_state}
-                        badgeTone={temperatureTone(latestSummary.temperature_state)}
-                      />
-                      <MetricCard
-                        emoji="☀️"
-                        title="Licht"
-                        value={`${formatValue(latestSummary.light_level_median)} Lux`}
-                        badgeLabel={latestSummary.light_state}
-                        badgeTone={lightTone(latestSummary.light_state)}
-                      />
+                      {latestSummary.temperature_median !== undefined && latestSummary.temperature_state ? (
+                        <MetricCard
+                          emoji="🌡️"
+                          title="Lufttemperatur"
+                          value={`${formatValue(latestSummary.temperature_median)} °C`}
+                          badgeLabel={latestSummary.temperature_state}
+                          badgeTone={temperatureTone(latestSummary.temperature_state)}
+                        />
+                      ) : (
+                        <MetricCard emoji="🌡️" title="Lufttemperatur" value="–" hint="Kein Wert vom Sensor" badgeLabel="k. A." badgeTone="neutral" />
+                      )}
+                      {latestSummary.light_level_median !== undefined && latestSummary.light_state ? (
+                        <MetricCard
+                          emoji="☀️"
+                          title="Licht"
+                          value={`${formatValue(latestSummary.light_level_median)} Lux`}
+                          badgeLabel={latestSummary.light_state}
+                          badgeTone={lightTone(latestSummary.light_state)}
+                        />
+                      ) : (
+                        <MetricCard emoji="☀️" title="Licht" value="–" hint="Kein Wert vom Sensor" badgeLabel="k. A." badgeTone="neutral" />
+                      )}
                     </>
                   ) : (
                     <View style={styles.emptyState}>
@@ -366,7 +381,7 @@ export default function StatusScreen() {
                   </View>
 
                   <View style={styles.chartFrame}>
-                    {visibleSummaries.length > 0 ? (
+                    {visibleSummaries.length > 0 && hasChartValues ? (
                       <View style={styles.chartCanvas}>
                         <CartesianChart
                           data={chartData}
@@ -387,21 +402,25 @@ export default function StatusScreen() {
                         >
                           {({ points }) => (
                             <>
+                              {/* Fehlende Werte unterbrechen die Linie (feste y-Domain, keine Umskalierung). */}
                               <Line
                                 points={points.value}
                                 color={activeMetricConfig.lineColor}
                                 strokeWidth={2}
+                                connectMissingData={false}
                                 animate={{ type: 'timing', duration: 300 }}
                               />
-                              {points.value.map((point, index) => (
-                                <Circle
-                                  key={`${point.xValue}-${index}`}
-                                  cx={point.x}
-                                  cy={point.y ?? 0}
-                                  r={4}
-                                  color={activeMetricConfig.lineColor}
-                                />
-                              ))}
+                              {points.value.map((point, index) =>
+                                typeof point.y === 'number' ? (
+                                  <Circle
+                                    key={`${point.xValue}-${index}`}
+                                    cx={point.x}
+                                    cy={point.y}
+                                    r={4}
+                                    color={activeMetricConfig.lineColor}
+                                  />
+                                ) : null,
+                              )}
                             </>
                           )}
                         </CartesianChart>
@@ -420,6 +439,13 @@ export default function StatusScreen() {
                             <Text style={styles.chartTooltipValue}>{formatMetricTooltipValue(selectedMetric, tooltipState.value)}</Text>
                           </View>
                         ) : null}
+                      </View>
+                    ) : visibleSummaries.length > 0 ? (
+                      <View style={styles.chartEmptyState}>
+                        <Text style={styles.emptyStateTitle}>Kein Wert vom Sensor</Text>
+                        <Text style={styles.emptyStateText}>
+                          In diesem Zeitraum hat dein Sensor keine Werte für {activeMetricConfig.label} geliefert.
+                        </Text>
                       </View>
                     ) : (
                       <View style={styles.chartEmptyState}>
@@ -544,40 +570,235 @@ export default function StatusScreen() {
   )
 }
 
+type ActionMessage = { tone: 'success' | 'info' | 'error'; text: string } | null
+
+// Bereich "Sensor": Befehle an den Sensor (Backend convex/device_commands.ts) und Entfernen.
+// Das WLAN-Passwort bleibt nur im Formular-State, wird nach dem Absenden geleert und nie geloggt.
+function SensorActions({ deviceId, onRemoved }: { deviceId: string; onRemoved: () => void }) {
+  const requestMeasureNow = useMutation(api.device_commands.requestMeasureNow)
+  const requestSetWifi = useMutation(api.device_commands.requestSetWifi)
+  const removeSensor = useMutation(api.device_commands.removeSensor)
+  const command = useDeviceCommand()
+  const [activeAction, setActiveAction] = useState<'measure' | 'wifi' | 'remove' | null>(null)
+  const [message, setMessage] = useState<ActionMessage>(null)
+  const [isWifiFormOpen, setIsWifiFormOpen] = useState(false)
+  const [wifiSsid, setWifiSsid] = useState('')
+  const [wifiPassword, setWifiPassword] = useState('')
+
+  const isBusy = activeAction !== null
+
+  const handleMeasureNow = async () => {
+    setActiveAction('measure')
+    setMessage({ tone: 'info', text: 'Auftrag wird an deinen Sensor geschickt …' })
+    const outcome = await command.run(() => requestMeasureNow({ device_id: deviceId }))
+    setActiveAction(null)
+
+    if (outcome.kind === 'ok') {
+      setMessage({ tone: 'success', text: 'Dein Sensor hat gerade gemessen. Die neuen Werte erscheinen gleich.' })
+    } else if (outcome.kind === 'waiting') {
+      setMessage({
+        tone: 'info',
+        text: 'Der Auftrag liegt für deinen Sensor bereit. Läuft er am Akku, holt er ihn erst beim nächsten Messen ab, das kann bis zu einer Stunde dauern. Am USB geht es sofort.',
+      })
+    } else if (outcome.kind === 'failed' || outcome.kind === 'expired' || outcome.kind === 'error') {
+      setMessage({ tone: 'error', text: outcome.message })
+    } else {
+      setMessage(null)
+    }
+  }
+
+  const handleSubmitWifi = async () => {
+    const ssid = wifiSsid.trim()
+    const password = wifiPassword
+    if (!ssid) return
+    // Passwort sofort aus dem State nehmen; es lebt nur noch in diesem Aufruf.
+    setWifiPassword('')
+    setIsWifiFormOpen(false)
+    setActiveAction('wifi')
+    setMessage({ tone: 'info', text: 'Die neuen WLAN-Daten werden an deinen Sensor geschickt …' })
+    const outcome = await command.run(() => requestSetWifi({ device_id: deviceId, ssid, password }))
+    setActiveAction(null)
+
+    if (outcome.kind === 'ok') {
+      setMessage({ tone: 'success', text: `Dein Sensor ist jetzt mit „${ssid}“ verbunden.` })
+      setWifiSsid('')
+    } else if (outcome.kind === 'waiting') {
+      setMessage({
+        tone: 'info',
+        text: 'Der Auftrag liegt für deinen Sensor bereit. Läuft er am Akku, holt er ihn erst beim nächsten Messen ab. Passiert das nicht innerhalb von 10 Minuten, verfällt der Auftrag, und du kannst es noch einmal versuchen. Am USB geht es sofort.',
+      })
+    } else if (outcome.kind === 'failed' || outcome.kind === 'expired') {
+      setMessage({ tone: 'error', text: outcome.message })
+      // Falsches Passwort: Formular wieder öffnen, damit du es gleich korrigieren kannst.
+      if (outcome.kind === 'failed' && outcome.detail === 'auth_failed') setIsWifiFormOpen(true)
+    } else if (outcome.kind === 'error') {
+      setMessage({ tone: 'error', text: outcome.message })
+    } else {
+      setMessage(null)
+    }
+  }
+
+  const handleRemove = () => {
+    Alert.alert(
+      'Sensor entfernen?',
+      'Der Sensor wird aus deinem Konto entfernt. Pflanzen, die ihm zugeordnet sind, werden gelöst. Wenn du ihn wieder nutzen willst, musst du ihn neu einrichten: per USB einstecken und über „Sensor hinzufügen“ koppeln.',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Entfernen',
+          style: 'destructive',
+          onPress: () => {
+            command.cancel()
+            setActiveAction('remove')
+            void removeSensor({ device_id: deviceId })
+              .then(onRemoved)
+              .catch(() => {
+                setActiveAction(null)
+                Alert.alert('Entfernen nicht möglich', 'Der Sensor konnte gerade nicht entfernt werden. Prüfe deine Verbindung und versuch es erneut.')
+              })
+          },
+        },
+      ],
+    )
+  }
+
+  return (
+    <View style={styles.chartCard}>
+      <Text style={styles.sectionTitle}>Sensor</Text>
+
+      <Pressable
+        accessibilityRole="button"
+        disabled={isBusy}
+        onPress={() => void handleMeasureNow()}
+        style={({ pressed }) => [styles.settingsButton, isBusy && styles.applyButtonDisabled, pressed && styles.settingsButtonPressed]}
+      >
+        <Text style={styles.settingsButtonText}>{activeAction === 'measure' ? 'Wird aktualisiert …' : 'Jetzt aktualisieren'}</Text>
+      </Pressable>
+
+      <Pressable
+        accessibilityRole="button"
+        disabled={isBusy}
+        onPress={() => setIsWifiFormOpen((open) => !open)}
+        style={({ pressed }) => [styles.settingsButton, isBusy && styles.applyButtonDisabled, pressed && styles.settingsButtonPressed]}
+      >
+        <Text style={styles.settingsButtonText}>{activeAction === 'wifi' ? 'WLAN wird geändert …' : 'WLAN ändern'}</Text>
+      </Pressable>
+
+      {isWifiFormOpen ? (
+        <View style={styles.sensorWifiForm}>
+          <Text style={styles.sectionSubtitle}>
+            Das geht nur, solange dein Sensor noch im alten WLAN online ist. Ist das alte WLAN schon weg, richte ihn per USB neu ein: „Sensor hinzufügen“ in der Pflanzenliste.
+          </Text>
+          <View style={styles.dateField}>
+            <Text style={styles.dateLabel}>Neues WLAN (SSID)</Text>
+            <TextInput
+              value={wifiSsid}
+              onChangeText={setWifiSsid}
+              placeholder="WLAN-Name"
+              placeholderTextColor={colors.muted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="off"
+              style={styles.dateInput}
+            />
+          </View>
+          <View style={styles.dateField}>
+            <Text style={styles.dateLabel}>WLAN-Passwort</Text>
+            <TextInput
+              value={wifiPassword}
+              onChangeText={setWifiPassword}
+              placeholder="Passwort"
+              placeholderTextColor={colors.muted}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="password"
+              textContentType="password"
+              style={styles.dateInput}
+            />
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            disabled={!wifiSsid.trim() || isBusy}
+            onPress={() => void handleSubmitWifi()}
+            style={({ pressed }) => [
+              styles.applyButton,
+              (!wifiSsid.trim() || isBusy) && styles.applyButtonDisabled,
+              pressed && styles.applyButtonPressed,
+            ]}
+          >
+            <Text style={styles.applyButtonText}>WLAN übernehmen</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {message ? (
+        <Text
+          style={[
+            styles.sensorMessage,
+            message.tone === 'success' ? styles.sensorMessageSuccess : message.tone === 'error' ? styles.sensorMessageError : null,
+          ]}
+        >
+          {message.text}
+        </Text>
+      ) : null}
+
+      <Pressable
+        accessibilityRole="button"
+        disabled={activeAction === 'remove'}
+        onPress={handleRemove}
+        style={({ pressed }) => [styles.settingsButton, styles.sensorRemoveButton, pressed && styles.settingsButtonPressed]}
+      >
+        <Text style={[styles.settingsButtonText, styles.sensorRemoveText]}>
+          {activeAction === 'remove' ? 'Wird entfernt …' : 'Sensor entfernen'}
+        </Text>
+      </Pressable>
+    </View>
+  )
+}
+
 function MetricCard({
   emoji,
   title,
   value,
+  hint,
   badgeLabel,
   badgeTone,
 }: {
   emoji: string
   title: string
   value: string
+  hint?: string
   badgeLabel: string
-  badgeTone: 'success' | 'warning' | 'critical'
+  // neutral: kein Wert vom Sensor, bewusst weder Warn- noch Fehlerfarbe.
+  badgeTone: 'success' | 'warning' | 'critical' | 'neutral'
 }) {
   const badgeStyle =
     badgeTone === 'success'
       ? styles.badgeSuccess
       : badgeTone === 'warning'
         ? styles.badgeWarning
-        : styles.badgeCritical
+        : badgeTone === 'neutral'
+          ? styles.badgeNeutral
+          : styles.badgeCritical
 
   const badgeTextStyle =
     badgeTone === 'success'
       ? styles.badgeSuccessText
       : badgeTone === 'warning'
         ? styles.badgeWarningText
-        : styles.badgeCriticalText
+        : badgeTone === 'neutral'
+          ? styles.badgeNeutralText
+          : styles.badgeCriticalText
 
   return (
     <View style={styles.card}>
       <Text style={styles.cardEmoji}>{emoji}</Text>
       <Text style={styles.cardTitle}>{title}</Text>
-      <Text style={styles.cardValue}>{value}</Text>
+      <Text style={[styles.cardValue, badgeTone === 'neutral' && styles.cardValueMuted]}>{value}</Text>
+      {hint ? <Text style={styles.cardHint}>{hint}</Text> : null}
       <View style={[styles.badge, badgeStyle]}>
-        <Text style={[styles.badgeText, badgeTextStyle]}>{badgeLabel.toUpperCase()}</Text>
+        <Text style={[styles.badgeText, badgeTextStyle]}>{badgeTone === 'neutral' ? badgeLabel : badgeLabel.toUpperCase()}</Text>
       </View>
     </View>
   )
@@ -1044,6 +1265,26 @@ const styles = StyleSheet.create({
   applyButtonDisabled: {
     opacity: 0.45,
   },
+  sensorWifiForm: {
+    gap: 12,
+  },
+  sensorMessage: {
+    color: colors.muted,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  sensorMessageSuccess: {
+    color: colors.success,
+  },
+  sensorMessageError: {
+    color: colors.critical,
+  },
+  sensorRemoveButton: {
+    borderColor: colors.critical,
+  },
+  sensorRemoveText: {
+    color: colors.critical,
+  },
   applyButtonPressed: {
     opacity: 0.88,
   },
@@ -1131,6 +1372,22 @@ const styles = StyleSheet.create({
   },
   badgeCriticalText: {
     color: colors.criticalText,
+  },
+  badgeNeutral: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  badgeNeutralText: {
+    color: colors.muted,
+    textTransform: 'none',
+  },
+  cardValueMuted: {
+    color: colors.muted,
+  },
+  cardHint: {
+    color: colors.muted,
+    fontSize: 13,
   },
   emptyState: {
     flex: 1,

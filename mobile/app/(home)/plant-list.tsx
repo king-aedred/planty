@@ -1,10 +1,10 @@
 import { Colors } from '@/constants/colors'
 import { api } from '../../../convex/_generated/api'
 import BurgerMenu from '../../components/burger-menu'
-import { useQuery } from 'convex/react'
+import { useMutation, useQuery } from 'convex/react'
 import { useRouter } from 'expo-router'
-import { useRef } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useRef, useState } from 'react'
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 const colors = Colors.dark
@@ -24,6 +24,8 @@ export default function PlantListScreen() {
   const plants = useQuery(api.plants.getAllPlantsByClerkId, clerkId ? { clerk_id: clerkId } : 'skip')
   const sensors = useQuery(api.sensors.getSensorsByClerkId, clerkId ? {} : 'skip')
   const unreadCount = useQuery(api.messages.getUnreadCount, clerkId ? { clerk_id: clerkId } : 'skip')
+  const removeSensor = useMutation(api.device_commands.removeSensor)
+  const [removingDeviceId, setRemovingDeviceId] = useState('')
 
   const handleAddPlant = () => {
     router.push('/(home)/add-plant')
@@ -35,6 +37,30 @@ export default function PlantListScreen() {
 
   const handleAssignSensor = (deviceId: string) => {
     router.push({ pathname: '/(home)/add-plant', params: { device_id: deviceId } })
+  }
+
+  // Entfernen wirkt sofort im Backend: Besitz und Pflanzen werden gelöst, der Sensor verschwindet
+  // aus der Liste (reaktive Query). Das Gerät selbst fällt beim nächsten Kontakt in "nicht zugeordnet".
+  const handleRemoveSensor = (deviceId: string) => {
+    Alert.alert(
+      'Sensor entfernen?',
+      'Der Sensor wird aus deinem Konto entfernt. Pflanzen, die ihm zugeordnet sind, werden gelöst. Wenn du ihn wieder nutzen willst, musst du ihn neu einrichten: per USB einstecken und über „Sensor hinzufügen“ koppeln.',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Entfernen',
+          style: 'destructive',
+          onPress: () => {
+            setRemovingDeviceId(deviceId)
+            void removeSensor({ device_id: deviceId })
+              .catch(() => {
+                Alert.alert('Entfernen nicht möglich', 'Der Sensor konnte gerade nicht entfernt werden. Prüfe deine Verbindung und versuch es erneut.')
+              })
+              .finally(() => setRemovingDeviceId(''))
+          },
+        },
+      ],
+    )
   }
 
   const handleOpenInbox = () => {
@@ -147,6 +173,16 @@ export default function PlantListScreen() {
                 >
                   <Text style={styles.assignButtonText}>Pflanze zuordnen</Text>
                 </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={removingDeviceId === sensor.device_id}
+                  onPress={() => handleRemoveSensor(sensor.device_id)}
+                  style={({ pressed }) => [styles.resetButton, pressed && styles.cardPressed]}
+                >
+                  <Text style={styles.resetButtonText}>
+                    {removingDeviceId === sensor.device_id ? 'Wird entfernt…' : 'Sensor entfernen'}
+                  </Text>
+                </Pressable>
               </View>
             ))}
             {plants?.length === 0 && sensors?.filter((sensor) => !sensor.has_plant).length === 0 ? (
@@ -189,11 +225,15 @@ function StatusBadge({ tone, label }: { tone: BadgeTone; label: string }) {
   )
 }
 
-function getOverallTone(summary: {
+// Temperatur und Licht fehlen, wenn der jeweilige Sensor ausgefallen ist. Eine fehlende
+// Dimension gilt wie im Backend als unauffällig, nur echte schlechte Zustände warnen.
+type OverallSummary = {
   moisture_state: SummaryState
-  temperature_state: SummaryState
-  light_state: SummaryState
-} | null) {
+  temperature_state?: SummaryState
+  light_state?: SummaryState
+} | null
+
+function getOverallTone(summary: OverallSummary) {
   if (!summary) {
     return 'warning'
   }
@@ -204,8 +244,8 @@ function getOverallTone(summary: {
 
   if (
     summary.moisture_state !== 'ok' ||
-    summary.temperature_state !== 'ok' ||
-    summary.light_state !== 'ok'
+    (summary.temperature_state ?? 'ok') !== 'ok' ||
+    (summary.light_state ?? 'ok') !== 'ok'
   ) {
     return 'warning'
   }
@@ -213,11 +253,7 @@ function getOverallTone(summary: {
   return 'success'
 }
 
-function getOverallLabel(summary: {
-  moisture_state: SummaryState
-  temperature_state: SummaryState
-  light_state: SummaryState
-} | null) {
+function getOverallLabel(summary: OverallSummary) {
   if (!summary) {
     return 'NO DATA'
   }
@@ -451,6 +487,19 @@ const styles = StyleSheet.create({
   },
   assignButtonText: {
     color: colors.accent,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  resetButton: {
+    alignSelf: 'flex-start',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  resetButtonText: {
+    color: colors.muted,
     fontSize: 14,
     fontWeight: '700',
   },

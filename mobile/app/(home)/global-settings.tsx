@@ -123,7 +123,7 @@ export default function GlobalSettingsScreen() {
   const [contactWindowStart, setContactWindowStart] = useState('9')
   const [contactWindowEnd, setContactWindowEnd] = useState('21')
   const [phoneNumber, setPhoneNumber] = useState('')
-  const [maxNotificationsPerDay, setMaxNotificationsPerDay] = useState(3)
+  const [maxNotificationsPerDay, setMaxNotificationsPerDay] = useState(1)
   const [username, setUsername] = useState('')
   const [usernameMessage, setUsernameMessage] = useState('')
   const [usernameMessageKind, setUsernameMessageKind] = useState<'success' | 'error' | ''>('')
@@ -157,7 +157,7 @@ export default function GlobalSettingsScreen() {
 
     setNotificationRules(normalizeNotificationRules(currentUser.notification_rules))
     setPhoneNumber(currentUser.phone_number ?? '')
-    setMaxNotificationsPerDay(currentUser.max_notifications_per_day ?? 3)
+    setMaxNotificationsPerDay(currentUser.max_notifications_per_day ?? 1)
   }, [currentUser])
 
   const goBack = () => {
