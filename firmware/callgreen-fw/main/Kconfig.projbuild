@@ -1,0 +1,42 @@
+menu "Callgreen"
+
+    config CALLGREEN_BASE_URL
+        string "Backend Base-URL (ohne / am Ende)"
+        default "https://dusty-shrimp-80.eu-west-1.convex.site"
+
+    config CALLGREEN_POP
+        string "BLE-Provisioning Proof of Possession (Security 1)"
+        default ""
+        help
+            Fuer alle Geraete gleich. Wert gehoert in sdkconfig.defaults.local (gitignored).
+
+    config CALLGREEN_SETTLE_MS
+        int "Standard settle_ms: Einschwingzeit Bodenfeuchtesensor (ms)"
+        range 50 30000
+        default 2000
+        help
+            Standardwert, bis das Backend per config einen anderen setzt.
+
+    config CALLGREEN_SAMPLES
+        int "Standard samples: Rohwerte pro Messung (Abstand 50 ms)"
+        range 1 200
+        default 20
+        help
+            Standardwert, bis das Backend per config einen anderen setzt.
+
+    config CALLGREEN_SETTLE_TEST
+        bool "Settle-Test statt Messzyklus"
+        default n
+        help
+            Sensor an, 60 s lang alle 100 ms den ADC-Rohwert loggen, dann schlafen.
+            Kein WLAN, nichts wird gesendet.
+
+    config CALLGREEN_OTA_TEST_FAIL
+        bool "NUR TEST: nach OTA vor dem Backend-Kontakt abstuerzen (Rollback-Test)"
+        default n
+        help
+            Nur fuer ein Test-Image: Startet die Firmware nach einem OTA im Zustand
+            PENDING_VERIFY, stuerzt sie nach 5 s ab. Der Bootloader rollt dann zurueck.
+            Per USB geflasht hat der Schalter keine Wirkung.
+
+endmenu

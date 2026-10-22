@@ -1,0 +1,37 @@
+CONFIG_IDF_TARGET="esp32c3"
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+# Muss aus bleiben, sonst zieht der interne Pull-down IO5 im Schlaf auf LOW
+# CONFIG_ESP_SLEEP_GPIO_ENABLE_INTERNAL_RESISTORS is not set
+
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+# OTA (v8 Abschnitt 6): neue Firmware gilt erst nach Backend-Kontakt, sonst Rollback.
+# Aendert den Bootloader, deshalb einmaliger USB-Flash pro Geraet.
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+# Kleineres Image, mehr Reserve im OTA-Slot
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# HTTPS im Main-Task braucht mehr Stack
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
+# convex.site schickt GTS Root R4 cross-signed von GlobalSign Root CA (R1, nicht im Bundle)
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_CROSS_SIGNED_VERIFY=y
+CONFIG_LWIP_SNTP_MAX_SERVERS=2
+# Standard: zufaellige Verzoegerung 0-5 s vor der ersten SNTP-Anfrage. Damit lief das
+# 5-s-Fenster fuer den Sync oft ab. Die Weckzeiten streuen ohnehin durch die RC-Drift.
+# CONFIG_LWIP_SNTP_STARTUP_DELAY is not set
+
+# BLE-Provisioning: NimBLE, nur Peripheral-Rolle (spart RAM und Flash)
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+# CONFIG_BT_NIMBLE_ROLE_CENTRAL is not set
+# CONFIG_BT_NIMBLE_ROLE_OBSERVER is not set
+# Seit IDF v6 standardmaessig aus
+CONFIG_ESP_PROTOCOMM_SUPPORT_SECURITY_VERSION_1=y
+
+# Standardwerte fuer config (Vertrag Abschnitt 8), Backend kann sie ueberschreiben
+CONFIG_CALLGREEN_SETTLE_MS=2000
+CONFIG_CALLGREEN_SAMPLES=20
+# CONFIG_CALLGREEN_SETTLE_TEST is not set
