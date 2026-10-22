@@ -13,14 +13,15 @@ export function Logo({ size = 32, variant = 'full' }: LogoProps) {
 
   const mark = (
     <Svg width={size} height={size} viewBox="0 0 32 32">
-      <Rect x={2} y={2} width={28} height={28} rx={6} fill={theme.brand.val} />
+      <Rect x={2} y={2} width={28} height={28} rx={6} fill={theme.brand?.val} />
       <Rect
         x={10}
         y={10}
         width={12}
         height={12}
         rx={2}
-        fill={theme.accent.val}
+        // brand und accent sind im Violet-Theme gleich; die Raute steht deshalb in textOnAccent.
+        fill={theme.textOnAccent?.val}
         transform="rotate(45 16 16)"
       />
     </Svg>

@@ -1,3 +1,5 @@
+// Muss vor allem anderen laden: Tamagui 3 braucht `usePressability` aus react-native (siehe Datei).
+import '../polyfills/react-native-use-pressability'
 import * as Notifications from 'expo-notifications'
 import Constants from 'expo-constants'
 import { ConvexReactClient } from 'convex/react'
@@ -7,18 +9,20 @@ import { ClerkProvider } from '@clerk/expo'
 import { tokenCache } from '@clerk/expo/token-cache'
 import { api } from '../../convex/_generated/api'
 import { Stack } from 'expo-router'
-import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native'
+import { Platform, useColorScheme } from 'react-native'
+import { StatusBar } from 'expo-status-bar'
 import { useEffect, type ReactNode, useRef } from 'react'
 import { useFonts } from 'expo-font'
 import * as SplashScreen from 'expo-splash-screen'
+import { BebasNeue_400Regular } from '@expo-google-fonts/bebas-neue'
 import {
-  Antonio_400Regular,
-  Antonio_500Medium,
-  Antonio_600SemiBold,
-  Antonio_700Bold,
-} from '@expo-google-fonts/antonio'
-import { Jost_400Regular, Jost_500Medium, Jost_600SemiBold, Jost_700Bold } from '@expo-google-fonts/jost'
+  SpaceGrotesk_400Regular,
+  SpaceGrotesk_500Medium,
+  SpaceGrotesk_600SemiBold,
+  SpaceGrotesk_700Bold,
+} from '@expo-google-fonts/space-grotesk'
 import { TamaguiProvider } from 'tamagui'
+import { LoadingScreen } from '../components/ui/loading-screen'
 import { tamaguiConfig } from '../tamagui.config'
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY
@@ -48,15 +52,14 @@ Notifications.setNotificationHandler({
 SplashScreen.preventAutoHideAsync()
 
 export default function RootLayout() {
+  // Dark und Light folgen der Systemeinstellung; Dark ist der Standard, falls das System nichts meldet.
+  const colorScheme = useColorScheme() === 'light' ? 'light' : 'dark'
   const [fontsLoaded, fontError] = useFonts({
-    Antonio_400Regular,
-    Antonio_500Medium,
-    Antonio_600SemiBold,
-    Antonio_700Bold,
-    Jost_400Regular,
-    Jost_500Medium,
-    Jost_600SemiBold,
-    Jost_700Bold,
+    BebasNeue_400Regular,
+    SpaceGrotesk_400Regular,
+    SpaceGrotesk_500Medium,
+    SpaceGrotesk_600SemiBold,
+    SpaceGrotesk_700Bold,
   })
 
   useEffect(() => {
@@ -70,7 +73,8 @@ export default function RootLayout() {
   }
 
   return (
-    <TamaguiProvider config={tamaguiConfig} defaultTheme="dark">
+    <TamaguiProvider config={tamaguiConfig} defaultTheme={colorScheme}>
+      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
       <ClerkProvider publishableKey={clerkPublishableKey} tokenCache={tokenCache}>
         <ClerkLoadingGate>
           <ConvexWithClerk>
@@ -92,9 +96,7 @@ function ClerkLoadingGate({ children }: { children: ReactNode }) {
 
   if (!isLoaded) {
     return (
-      <View style={styles.loadingScreen}>
-        <ActivityIndicator size="large" color="#7FD38A" />
-      </View>
+      <LoadingScreen />
     )
   }
 
@@ -170,12 +172,3 @@ function PushTokenRegistration() {
 
   return null
 }
-
-const styles = StyleSheet.create({
-  loadingScreen: {
-    flex: 1,
-    backgroundColor: '#07130F',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-})

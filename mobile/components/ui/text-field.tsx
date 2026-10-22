@@ -47,8 +47,9 @@ export function TextField({
       <XStack
         alignItems="center"
         borderWidth={1}
-        borderRadius="$8"
+        borderRadius="$12"
         borderColor={borderColor}
+        backgroundColor="$background"
         paddingHorizontal="$12"
       >
         <Input
@@ -57,8 +58,14 @@ export function TextField({
               inputRef.current = instance as unknown as { focus: () => void } | null
             }
           }}
-          unstyled
           flex={1}
+          // Tamagui 3: Input bringt eigene Fläche und Rahmen mit; der äußere Rahmen übernimmt beides.
+          backgroundColor="transparent"
+          borderWidth={0}
+          // Tamagui 3 setzt sonst den Radius der Größenstufe ("md"). Den Token gibt es bei uns nicht,
+          // der String landet nativ im TextInput und Android wirft eine JSApplicationIllegalArgumentException.
+          borderRadius={0}
+          outlineWidth={0}
           fontFamily="$body"
           fontSize={16}
           color="$textPrimary"
@@ -86,7 +93,7 @@ export function TextField({
             <Ionicons
               name={isRevealed ? 'eye-off-outline' : 'eye-outline'}
               size={20}
-              color={theme.textSecondary.val}
+              color={theme.textSecondary?.val}
             />
           </Pressable>
         ) : null}

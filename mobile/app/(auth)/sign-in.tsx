@@ -194,7 +194,7 @@ function SignInContent() {
                 <Text fontFamily="$heading" color="$textPrimary" fontSize="$8" marginTop="$4">
                   Deine Pflanze wartet schon.
                 </Text>
-                <Text fontFamily="$body" color="$textSecondary" fontSize={15} lineHeight={21} marginBottom="$4">
+                <Text fontFamily="$body" color="$textSecondary" fontSize={15} lineHeight="$5" marginBottom="$4">
                   Melde dich an — lange Funkstille mag sie nicht.
                 </Text>
 

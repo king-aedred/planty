@@ -195,7 +195,7 @@ function SignUpContent() {
                   <Text fontFamily="$heading" color="$textPrimary" fontSize="$7" marginTop="$4">
                     E-Mail bestätigen
                   </Text>
-                  <Text fontFamily="$body" color="$textSecondary" fontSize={15} lineHeight={21} marginBottom="$4">
+                  <Text fontFamily="$body" color="$textSecondary" fontSize={15} lineHeight="$5" marginBottom="$4">
                     Wir haben dir einen Code geschickt. Kurz reinschauen.
                   </Text>
 
@@ -248,7 +248,7 @@ function SignUpContent() {
                 <Text fontFamily="$heading" color="$textPrimary" fontSize="$8" marginTop="$4">
                   Gib deiner Pflanze eine Stimme.
                 </Text>
-                <Text fontFamily="$body" color="$textSecondary" fontSize={15} lineHeight={21} marginBottom="$4">
+                <Text fontFamily="$body" color="$textSecondary" fontSize={15} lineHeight="$5" marginBottom="$4">
                   Konto erstellen — der Rest ist Wasser und Geduld.
                 </Text>
 
@@ -314,7 +314,7 @@ function SignUpContent() {
                       alignItems="center"
                       justifyContent="center"
                     >
-                      {legalAccepted ? <Ionicons name="checkmark" size={14} color={theme.textOnAccent.val} /> : null}
+                      {legalAccepted ? <Ionicons name="checkmark" size={14} color={theme.textOnAccent?.val} /> : null}
                     </View>
                     <Text fontFamily="$body" fontSize={14} color="$textPrimary" flex={1}>
                       Ich akzeptiere die Nutzungsbedingungen.

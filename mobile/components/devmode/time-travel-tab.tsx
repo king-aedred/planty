@@ -1,5 +1,5 @@
-import { Colors } from '@/constants/colors'
 import { useMemo, useEffect, useState } from 'react'
+import { usePalette, type Palette } from '@/theme/use-palette'
 import {
   ActivityIndicator,
   Modal,
@@ -11,7 +11,6 @@ import {
   View,
 } from 'react-native'
 
-const colors = Colors.dark
 
 export type SensorPlant = {
   id: string
@@ -112,11 +111,11 @@ const getOverallState = (metrics: MetricPreview[]): 'ok' | 'warning' | 'critical
   return 'ok'
 }
 
-const stateLabelStyles: Record<MetricPreview['state'], object> = {
-  ok: { color: colors.success, backgroundColor: 'rgba(127, 211, 138, 0.12)', borderColor: 'rgba(127, 211, 138, 0.28)' },
-  warning: { color: colors.warning, backgroundColor: 'rgba(240, 164, 75, 0.12)', borderColor: 'rgba(240, 164, 75, 0.28)' },
-  critical: { color: colors.critical, backgroundColor: 'rgba(255, 140, 140, 0.12)', borderColor: 'rgba(255, 140, 140, 0.28)' },
-}
+const createStateLabelStyles = (colors: Palette): Record<MetricPreview['state'], object> => ({
+  ok: { color: colors.success, backgroundColor: colors.successSoft, borderColor: colors.success },
+  warning: { color: colors.warning, backgroundColor: colors.warningSoft, borderColor: colors.warning },
+  critical: { color: colors.critical, backgroundColor: colors.criticalSoft, borderColor: colors.critical },
+})
 
 export default function TimeTravelTab({
   plants,
@@ -131,6 +130,8 @@ export default function TimeTravelTab({
   overrideContactWindow: boolean
   onToggleOverrideContactWindow: () => void
 }) {
+  const colors = usePalette()
+  const styles = useMemo(() => createStyles(colors), [colors])
   const [selectedPlantId, setSelectedPlantId] = useState('')
   const [isPlantDropdownOpen, setIsPlantDropdownOpen] = useState(false)
   const [date, setDate] = useState(todayString())
@@ -463,7 +464,7 @@ export default function TimeTravelTab({
             value={date}
             onChangeText={setDate}
             placeholder="YYYY-MM-DD"
-            placeholderTextColor={colors.muted}
+            placeholderTextColor={colors.textSecondary}
             autoCapitalize="none"
             style={styles.textInput}
           />
@@ -482,7 +483,7 @@ export default function TimeTravelTab({
             value={hour}
             onChangeText={(value) => setHour(value.replace(/[^0-9]/g, '').slice(0, 2))}
             placeholder="HH"
-            placeholderTextColor={colors.muted}
+            placeholderTextColor={colors.textSecondary}
             keyboardType="number-pad"
             style={styles.textInput}
           />
@@ -504,8 +505,8 @@ export default function TimeTravelTab({
             <View key={metric.label} style={styles.previewCard}>
               <Text style={styles.previewLabel}>{metric.label}</Text>
               <Text style={styles.previewValue}>{metric.value}</Text>
-              <View style={[styles.stateBadge, stateLabelStyles[metric.state]]}>
-                <Text style={[styles.stateBadgeText, stateLabelStyles[metric.state]]}>{metric.stateLabel}</Text>
+              <View style={[styles.stateBadge, createStateLabelStyles(colors)[metric.state]]}>
+                <Text style={[styles.stateBadgeText, createStateLabelStyles(colors)[metric.state]]}>{metric.stateLabel}</Text>
               </View>
             </View>
           ))}
@@ -535,11 +536,11 @@ export default function TimeTravelTab({
           <View style={styles.inputGrid}>
             <View style={styles.inputCard}>
               <Text style={styles.selectorLabel}>Von Datum</Text>
-              <TextInput value={batchFromDate} onChangeText={setBatchFromDate} placeholder="YYYY-MM-DD" placeholderTextColor={colors.muted} autoCapitalize="none" style={styles.textInput} />
+              <TextInput value={batchFromDate} onChangeText={setBatchFromDate} placeholder="YYYY-MM-DD" placeholderTextColor={colors.textSecondary} autoCapitalize="none" style={styles.textInput} />
             </View>
             <View style={styles.inputCard}>
               <Text style={styles.selectorLabel}>Bis Datum</Text>
-              <TextInput value={batchToDate} onChangeText={setBatchToDate} placeholder="YYYY-MM-DD" placeholderTextColor={colors.muted} autoCapitalize="none" style={styles.textInput} />
+              <TextInput value={batchToDate} onChangeText={setBatchToDate} placeholder="YYYY-MM-DD" placeholderTextColor={colors.textSecondary} autoCapitalize="none" style={styles.textInput} />
             </View>
           </View>
 
@@ -586,12 +587,14 @@ export default function TimeTravelTab({
 
       {resultMessage ? <Text style={styles.success}>{resultMessage}</Text> : null}
       {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
-      {isSubmitting ? <ActivityIndicator color={colors.accent} /> : null}
+      {isSubmitting ? <ActivityIndicator color={colors.accentText} /> : null}
     </View>
   )
 }
 
 function ShortcutButton({ label, onPress }: { label: string; onPress: () => void }) {
+  const colors = usePalette()
+  const styles = useMemo(() => createStyles(colors), [colors])
   return (
     <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.shortcutButton, pressed && styles.buttonPressed]}>
       <Text style={styles.shortcutButtonText}>{label}</Text>
@@ -612,6 +615,8 @@ function StepInput({
   minimum: number
   maximum: number
 }) {
+  const colors = usePalette()
+  const styles = useMemo(() => createStyles(colors), [colors])
   const numericValue = Number(value)
   const decrementDisabled = !Number.isFinite(numericValue) || numericValue <= minimum
   const incrementDisabled = !Number.isFinite(numericValue) || numericValue >= maximum
@@ -624,7 +629,7 @@ function StepInput({
           value={value}
           onChangeText={(nextValue) => onChangeValue(nextValue.replace(/[^0-9]/g, '').slice(0, 4))}
           placeholder={`0-${maximum}`}
-          placeholderTextColor={colors.muted}
+          placeholderTextColor={colors.textSecondary}
           keyboardType="number-pad"
           style={styles.textInput}
         />
@@ -657,22 +662,23 @@ const scenarioOptions: Array<{ value: TimeTravelScenario; label: string; descrip
   { value: 'random', label: 'Zufällig', description: 'Realistische Werte mit Zufall' },
 ]
 
-const styles = StyleSheet.create({
+const createStyles = (colors: Palette) =>
+  StyleSheet.create({
   section: {
     gap: 12,
   },
   sectionTitle: {
-    color: colors.text,
+    color: colors.textPrimary,
     fontSize: 20,
     fontWeight: '800',
   },
   sectionSubtitle: {
-    color: colors.text,
+    color: colors.textPrimary,
     fontSize: 18,
     fontWeight: '800',
   },
   helperText: {
-    color: colors.muted,
+    color: colors.textSecondary,
     fontSize: 14,
     lineHeight: 20,
   },
@@ -698,7 +704,7 @@ const styles = StyleSheet.create({
   },
   inlineCheckboxSelected: {
     borderColor: colors.accent,
-    backgroundColor: 'rgba(127, 211, 138, 0.12)',
+    backgroundColor: colors.accentSoft,
   },
   inlineCheckboxMark: {
     width: 10,
@@ -707,12 +713,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   checkboxRowText: {
-    color: colors.text,
+    color: colors.textPrimary,
     fontSize: 13,
     fontWeight: '600',
   },
   selectorLabel: {
-    color: colors.muted,
+    color: colors.textSecondary,
     fontSize: 13,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -736,13 +742,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   dropdownChevron: {
-    color: colors.muted,
+    color: colors.textSecondary,
     fontSize: 16,
     fontWeight: '800',
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     padding: 20,
   },
@@ -756,7 +762,7 @@ const styles = StyleSheet.create({
     maxHeight: '70%',
   },
   dropdownTitle: {
-    color: colors.text,
+    color: colors.textPrimary,
     fontSize: 18,
     fontWeight: '800',
   },
@@ -784,12 +790,12 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   selectorCardTitle: {
-    color: colors.text,
+    color: colors.textPrimary,
     fontSize: 16,
     fontWeight: '800',
   },
   selectorCardText: {
-    color: colors.muted,
+    color: colors.textSecondary,
     fontSize: 13,
   },
   radio: {
@@ -818,7 +824,7 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   textInput: {
-    color: colors.text,
+    color: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 14,
@@ -841,7 +847,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   shortcutButtonText: {
-    color: colors.text,
+    color: colors.textPrimary,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -856,7 +862,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   stepInputLabel: {
-    color: colors.text,
+    color: colors.textPrimary,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -874,7 +880,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   stepButtonText: {
-    color: colors.text,
+    color: colors.textPrimary,
     fontSize: 22,
     fontWeight: '800',
     lineHeight: 22,
@@ -904,14 +910,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   previewLabel: {
-    color: colors.muted,
+    color: colors.textSecondary,
     fontSize: 12,
     textTransform: 'uppercase',
     letterSpacing: 1,
     fontWeight: '700',
   },
   previewValue: {
-    color: colors.text,
+    color: colors.textPrimary,
     fontSize: 20,
     fontWeight: '800',
   },
@@ -936,7 +942,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   primaryButtonText: {
-    color: colors.accentText,
+    color: colors.textOnAccent,
     fontSize: 15,
     fontWeight: '800',
   },
@@ -950,7 +956,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   secondaryButtonText: {
-    color: colors.text,
+    color: colors.textPrimary,
     fontSize: 15,
     fontWeight: '800',
   },
@@ -964,8 +970,8 @@ const styles = StyleSheet.create({
   },
   success: {
     color: colors.success,
-    backgroundColor: 'rgba(127, 211, 138, 0.12)',
-    borderColor: 'rgba(127, 211, 138, 0.3)',
+    backgroundColor: colors.successSoft,
+    borderColor: colors.success,
     borderWidth: 1,
     borderRadius: 16,
     padding: 12,
@@ -973,8 +979,8 @@ const styles = StyleSheet.create({
   },
   error: {
     color: colors.critical,
-    backgroundColor: 'rgba(255, 140, 140, 0.12)',
-    borderColor: 'rgba(255, 140, 140, 0.3)',
+    backgroundColor: colors.criticalSoft,
+    borderColor: colors.critical,
     borderWidth: 1,
     borderRadius: 16,
     padding: 12,

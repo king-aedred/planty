@@ -1,10 +1,10 @@
-import { Colors } from '@/constants/colors'
 import { api } from '../../../convex/_generated/api'
-import BurgerMenu from '../../components/burger-menu'
+import { ScreenHeader } from '../../components/ui/screen-header'
 import TimeTravelTab from '../../components/devmode/time-travel-tab'
 import { useQuery } from 'convex/react'
 import { useRouter } from 'expo-router'
 import { useEffect, useMemo, useState } from 'react'
+import { usePalette, type Palette } from '@/theme/use-palette'
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -18,7 +18,6 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-const colors = Colors.dark
 const REQUEST_TIMEOUT_MS = 8000
 
 type SensorResult = {
@@ -114,6 +113,8 @@ type SensorLogEntry = {
 }
 
 export default function DevModeScreen() {
+  const colors = usePalette()
+  const styles = useMemo(() => createStyles(colors), [colors])
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { useAuth, useUser } = require('@clerk/expo') as typeof import('@clerk/expo')
   const { getToken } = useAuth()
@@ -741,11 +742,9 @@ export default function DevModeScreen() {
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <View style={styles.container}>
-            <BurgerMenu deviceId={selectedSinglePlant?.deviceId || deviceId || undefined} />
+            <ScreenHeader eyebrow="Callgreen" title="Dev Tools" onBack={() => router.back()} withMenu={false} />
 
             <View style={styles.hero}>
-              <Text style={styles.eyebrow}>Planty</Text>
-              <Text style={styles.title}>Dev Tools 🛠️</Text>
               <Text style={styles.meta}>Aktuelle User ID</Text>
               <Text style={styles.value}>{clerkId || 'Keine User ID gefunden'}</Text>
               <Text style={styles.meta}>Aktive Device ID</Text>
@@ -1023,7 +1022,7 @@ export default function DevModeScreen() {
               <Text style={styles.cronButtonText}>Manuell CronJob triggern</Text>
             </Pressable>
 
-            {isLoading ? <ActivityIndicator color={colors.accent} /> : null}
+            {isLoading ? <ActivityIndicator color={colors.accentText} /> : null}
             {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
           </View>
         </ScrollView>
@@ -1044,6 +1043,8 @@ const scenarioButtons = [
 ] as const
 
 function InfoRow({ label, value }: { label: string; value: string }) {
+  const colors = usePalette()
+  const styles = useMemo(() => createStyles(colors), [colors])
   return (
     <View style={styles.infoRow}>
       <Text style={styles.meta}>{label}</Text>
@@ -1061,6 +1062,8 @@ function TabButton({
   active: boolean
   onPress: () => void
 }) {
+  const colors = usePalette()
+  const styles = useMemo(() => createStyles(colors), [colors])
   return (
     <Pressable
       accessibilityRole="button"
@@ -1094,7 +1097,8 @@ function translateSensorLogErrors(log: SensorLogEntry) {
   return errors
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: Palette) =>
+  StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.background,
@@ -1115,20 +1119,6 @@ const styles = StyleSheet.create({
     paddingTop: 48,
     gap: 8,
   },
-  eyebrow: {
-    color: colors.accent,
-    textTransform: 'uppercase',
-    letterSpacing: 2,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  title: {
-    color: colors.text,
-    fontSize: 32,
-    fontWeight: '800',
-    lineHeight: 38,
-    marginBottom: 8,
-  },
   tabRow: {
     flexDirection: 'row',
     gap: 10,
@@ -1144,28 +1134,28 @@ const styles = StyleSheet.create({
   },
   tabButtonActive: {
     borderColor: colors.accent,
-    backgroundColor: '#123226',
+    backgroundColor: colors.accentSoft,
   },
   tabButtonPressed: {
     opacity: 0.92,
   },
   tabButtonText: {
-    color: colors.muted,
+    color: colors.textSecondary,
     fontWeight: '700',
   },
   tabButtonTextActive: {
-    color: colors.accent,
+    color: colors.accentText,
     fontWeight: '800',
   },
   meta: {
-    color: colors.muted,
+    color: colors.textSecondary,
     fontSize: 13,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
   value: {
-    color: colors.text,
+    color: colors.textPrimary,
     fontSize: 16,
     lineHeight: 22,
   },
@@ -1173,12 +1163,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sectionTitle: {
-    color: colors.text,
+    color: colors.textPrimary,
     fontSize: 20,
     fontWeight: '800',
   },
   helperText: {
-    color: colors.muted,
+    color: colors.textSecondary,
     fontSize: 14,
     lineHeight: 20,
   },
@@ -1204,7 +1194,7 @@ const styles = StyleSheet.create({
   },
   inlineCheckboxSelected: {
     borderColor: colors.accent,
-    backgroundColor: 'rgba(127, 211, 138, 0.12)',
+    backgroundColor: colors.accentSoft,
   },
   inlineCheckboxMark: {
     width: 10,
@@ -1213,12 +1203,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   checkboxRowText: {
-    color: colors.text,
+    color: colors.textPrimary,
     fontSize: 13,
     fontWeight: '600',
   },
   selectorLabel: {
-    color: colors.muted,
+    color: colors.textSecondary,
     fontSize: 13,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -1242,13 +1232,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   dropdownChevron: {
-    color: colors.muted,
+    color: colors.textSecondary,
     fontSize: 16,
     fontWeight: '800',
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     padding: 20,
   },
@@ -1262,7 +1252,7 @@ const styles = StyleSheet.create({
     maxHeight: '70%',
   },
   dropdownTitle: {
-    color: colors.text,
+    color: colors.textPrimary,
     fontSize: 18,
     fontWeight: '800',
   },
@@ -1290,12 +1280,12 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   selectorCardTitle: {
-    color: colors.text,
+    color: colors.textPrimary,
     fontSize: 16,
     fontWeight: '800',
   },
   selectorCardText: {
-    color: colors.muted,
+    color: colors.textSecondary,
     fontSize: 13,
   },
   radio: {
@@ -1353,7 +1343,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   cronButtonText: {
-    color: colors.accentText,
+    color: colors.textOnAccent,
     fontSize: 15,
     fontWeight: '800',
   },
@@ -1364,23 +1354,23 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   buttonText: {
-    color: colors.text,
+    color: colors.textPrimary,
     fontSize: 15,
     fontWeight: '700',
   },
   success: {
     color: colors.success,
-    backgroundColor: 'rgba(127, 211, 138, 0.12)',
-    borderColor: 'rgba(127, 211, 138, 0.3)',
+    backgroundColor: colors.successSoft,
+    borderColor: colors.success,
     borderWidth: 1,
     borderRadius: 16,
     padding: 12,
     lineHeight: 20,
   },
   error: {
-    color: colors.danger,
-    backgroundColor: 'rgba(255, 140, 140, 0.12)',
-    borderColor: 'rgba(255, 140, 140, 0.3)',
+    color: colors.critical,
+    backgroundColor: colors.criticalSoft,
+    borderColor: colors.critical,
     borderWidth: 1,
     borderRadius: 16,
     padding: 12,
@@ -1395,7 +1385,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   resultTitle: {
-    color: colors.text,
+    color: colors.textPrimary,
     fontSize: 16,
     fontWeight: '800',
   },
@@ -1418,23 +1408,23 @@ const styles = StyleSheet.create({
   },
   resultDeviceTitle: {
     flex: 1,
-    color: colors.text,
+    color: colors.textPrimary,
     fontSize: 15,
     fontWeight: '800',
   },
   resultDeviceId: {
-    color: colors.muted,
+    color: colors.textSecondary,
     fontSize: 12,
   },
   resultMeta: {
-    color: colors.muted,
+    color: colors.textSecondary,
     fontSize: 13,
   },
   infoRow: {
     gap: 4,
   },
   debugBlock: {
-    color: colors.muted,
+    color: colors.textSecondary,
     fontSize: 12,
     lineHeight: 18,
     backgroundColor: colors.surface,

@@ -2,7 +2,7 @@ import { api } from '../../../convex/_generated/api'
 import { Redirect, useRouter } from 'expo-router'
 import { useMutation, useQuery } from 'convex/react'
 import React, { useEffect, useRef } from 'react'
-import { ActivityIndicator, StyleSheet, View } from 'react-native'
+import { LoadingScreen } from '../../components/ui/loading-screen'
 
 class UnauthorizedRetryBoundary extends React.Component<
   {
@@ -90,22 +90,5 @@ function HomeContent() {
     return <Redirect href="/(auth)/sign-in" />
   }
 
-  return <Redirect href="/(home)/plant-list" />
+  return <Redirect href="/(home)/(tabs)/plant-list" />
 }
-
-function LoadingScreen() {
-  return (
-    <View style={styles.loadingScreen}>
-      <ActivityIndicator size="large" color="#7FD38A" />
-    </View>
-  )
-}
-
-const styles = StyleSheet.create({
-  loadingScreen: {
-    flex: 1,
-    backgroundColor: '#07130F',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-})

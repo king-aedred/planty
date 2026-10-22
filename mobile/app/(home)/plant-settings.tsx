@@ -1,59 +1,25 @@
-import { Colors } from '@/constants/colors'
 import { api } from '../../../convex/_generated/api'
 import { useMutation, useQuery } from 'convex/react'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useEffect, useMemo, useState } from 'react'
-import {
-  Alert,
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableWithoutFeedback,
-  View,
-} from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-
-const colors = Colors.dark
+import { Alert } from 'react-native'
+import { Text, XStack, YStack } from 'tamagui'
+import { PlantAvatar } from '../../components/plants/plant-avatar'
+import { Button } from '../../components/ui/button'
+import { Card } from '../../components/ui/card'
+import { EmptyState } from '../../components/ui/empty-state'
+import { Screen } from '../../components/ui/screen'
+import { ScreenHeader } from '../../components/ui/screen-header'
+import { SectionLabel } from '../../components/ui/section-label'
+import { Stepper } from '../../components/ui/stepper'
+import { TextField } from '../../components/ui/text-field'
 
 type PlantCharacter = 'happy' | 'grumpy' | 'neutral'
 
-const characterOptions: Array<{
-  value: PlantCharacter
-  label: string
-  emoji: string
-  backgroundColor: string
-  borderColor: string
-  textColor: string
-}> = [
-  {
-    value: 'happy',
-    label: 'Fröhlich',
-    emoji: '😊',
-    backgroundColor: colors.success,
-    borderColor: colors.success,
-    textColor: colors.successText,
-  },
-  {
-    value: 'grumpy',
-    label: 'Genervt',
-    emoji: '😤',
-    backgroundColor: colors.warning,
-    borderColor: colors.warning,
-    textColor: colors.warningText,
-  },
-  {
-    value: 'neutral',
-    label: 'Neutral',
-    emoji: '😐',
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-    textColor: colors.accentText,
-  },
+const characterOptions: { value: PlantCharacter; label: string; color: string; soft: string }[] = [
+  { value: 'happy', label: 'Fröhlich', color: '$characterHappy', soft: '$characterHappySoft' },
+  { value: 'grumpy', label: 'Grummelig', color: '$characterGrumpy', soft: '$characterGrumpySoft' },
+  { value: 'neutral', label: 'Gelassen', color: '$characterNeutral', soft: '$characterNeutralSoft' },
 ]
 
 type ThresholdConfig = {
@@ -176,205 +142,86 @@ export default function PlantSettingsScreen() {
 
   if (!plant) {
     return (
-      <SafeAreaView edges={['top']} style={styles.safeArea}>
-        <View style={styles.container}>
-          <Pressable accessibilityRole="button" onPress={goBack} style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
-            <Text style={styles.backButtonText}>Zurück</Text>
-          </Pressable>
-          <Text style={styles.title}>Pflanzen-Einstellungen</Text>
-          <Text style={styles.emptyText}>Pflanze nicht gefunden.</Text>
-        </View>
-      </SafeAreaView>
+      <Screen>
+        <ScreenHeader eyebrow="Einstellungen" title="Pflanze" onBack={goBack} withMenu={false} />
+        <Card>
+          <EmptyState icon="leaf-outline" title="Pflanze nicht gefunden" text="Vielleicht wurde sie gerade gelöscht." />
+        </Card>
+      </Screen>
     )
   }
 
   return (
-    <SafeAreaView edges={['top']} style={styles.safeArea}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-          <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-            <View style={styles.container}>
-              <View style={styles.topRow}>
-                <Pressable accessibilityRole="button" onPress={goBack} style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
-                  <Text style={styles.backButtonText}>Zurück</Text>
-                </Pressable>
-              </View>
+    <Screen scroll>
+      <ScreenHeader eyebrow="Einstellungen" title={plant.name} onBack={goBack} withMenu={false} />
 
-              <View style={styles.hero}>
-                <Text style={styles.eyebrow}>Planty</Text>
-                <Text style={styles.title}>{plant.name} Einstellungen</Text>
-              </View>
+      <Card>
+        <SectionLabel>Pflanze</SectionLabel>
+        <TextField label="Name" value={name} onChangeText={setName} placeholder="Pflanzenname" autoCapitalize="words" />
+      </Card>
 
-              <Section title="Pflanze">
-                <Field label="Name ändern" value={name} onChangeText={setName} placeholder="Pflanzenname" autoCapitalize="words" />
-              </Section>
-
-              <Section title="Persönlichkeit">
-                <View style={styles.characterRow}>
-                  {characterOptions.map((option) => {
-                    const isActive = selectedCharacter === option.value
-
-                    return (
-                      <Pressable
-                        key={option.value}
-                        accessibilityRole="button"
-                        disabled={isCharacterSaving}
-                        onPress={() => void handleCharacterChange(option.value)}
-                        style={({ pressed }) => [
-                          styles.characterButton,
-                          {
-                            backgroundColor: isActive ? option.backgroundColor : colors.background,
-                            borderColor: isActive ? option.borderColor : colors.border,
-                          },
-                          pressed && styles.pressed,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.characterButtonText,
-                            { color: isActive ? option.textColor : colors.text },
-                          ]}
-                        >
-                          {option.emoji} {option.label}
-                        </Text>
-                      </Pressable>
-                    )
-                  })}
-                </View>
-              </Section>
-
-              <Section title="Schwellenwerte">
-                {thresholdConfigs.map((config) => (
-                  <ThresholdControl
-                    key={config.key}
-                    config={config}
-                    value={values[config.key]}
-                    onChangeValue={(nextValue) =>
-                      setValues((current) => ({
-                        ...current,
-                        [config.key]: nextValue,
-                      }))
-                    }
-                  />
-                ))}
-              </Section>
-
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => void handleSave()}
-                disabled={isSaving}
-                style={({ pressed }) => [styles.saveButton, pressed && styles.pressed, isSaving && styles.saveButtonDisabled]}
-              >
-                <Text style={styles.saveButtonText}>{isSaving ? 'Speichere…' : 'Speichern'}</Text>
-              </Pressable>
-            </View>
-          </ScrollView>
-        </TouchableWithoutFeedback>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
-  )
-}
-
-function ThresholdControl({
-  config,
-  value,
-  onChangeValue,
-}: {
-  config: ThresholdConfig
-  value: string
-  onChangeValue: (value: string) => void
-}) {
-  const numericValue = clampNumber(Number(value), config.min, config.max, config.defaultValue)
-
-  const updateValue = (nextValue: number) => {
-    const clampedValue = clampNumber(nextValue, config.min, config.max, config.defaultValue)
-    onChangeValue(String(clampedValue))
-  }
-
-  return (
-    <View style={styles.thresholdCard}>
-      <View style={styles.thresholdHeader}>
-        <Text style={styles.thresholdLabel}>{config.label}</Text>
-        <Text style={styles.thresholdValue}>
-          {numericValue} {config.unit}
+      <Card>
+        <SectionLabel>Persönlichkeit</SectionLabel>
+        <Text fontFamily="$body" fontSize={13} lineHeight="$3" color="$textSecondary">
+          So schreibt dir deine Pflanze ihre Nachrichten.
         </Text>
-      </View>
+        <XStack gap="$8">
+          {characterOptions.map((option) => {
+            const isActive = selectedCharacter === option.value
+            return (
+              <YStack
+                key={option.value}
+                role="radio"
+                aria-checked={isActive}
+                flex={1}
+                onPress={isCharacterSaving ? undefined : () => void handleCharacterChange(option.value)}
+                alignItems="center"
+                gap="$8"
+                paddingVertical="$12"
+                borderRadius="$16"
+                borderWidth={1}
+                borderColor={isActive ? option.color : '$border'}
+                backgroundColor={isActive ? option.soft : '$surface press:$surfaceElevated'}
+              >
+                <PlantAvatar mood={option.value} status="success" />
+                <Text fontFamily="$body" fontWeight="600" fontSize={13} color={isActive ? option.color : '$textSecondary'}>
+                  {option.label}
+                </Text>
+              </YStack>
+            )
+          })}
+        </XStack>
+      </Card>
 
-      <StepInput value={numericValue} min={config.min} max={config.max} onChangeValue={updateValue} />
-    </View>
-  )
-}
+      <Card>
+        <SectionLabel>Schwellenwerte</SectionLabel>
+        {thresholdConfigs.map((config) => {
+          const numericValue = clampNumber(Number(values[config.key]), config.min, config.max, config.defaultValue)
+          return (
+            <YStack key={config.key} gap="$8">
+              <XStack justifyContent="space-between" alignItems="baseline">
+                <Text fontFamily="$body" fontWeight="600" fontSize={14} color="$textPrimary">
+                  {config.label}
+                </Text>
+                <Text fontFamily="$body" fontSize={13} color="$textSecondary">
+                  {numericValue} {config.unit}
+                </Text>
+              </XStack>
+              <Stepper
+                value={numericValue}
+                min={config.min}
+                max={config.max}
+                onChange={(nextValue) => setValues((current) => ({ ...current, [config.key]: String(nextValue) }))}
+              />
+            </YStack>
+          )
+        })}
+      </Card>
 
-function StepInput({
-  value,
-  min,
-  max,
-  onChangeValue,
-}: {
-  value: number
-  min: number
-  max: number
-  onChangeValue: (value: number) => void
-}) {
-  return (
-    <View style={styles.stepInputRow}>
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => onChangeValue(value - 1)}
-        style={({ pressed }) => [styles.stepButton, pressed && styles.pressed]}
-      >
-        <Text style={styles.stepButtonText}>-</Text>
-      </Pressable>
-
-      <TextInput
-        value={String(value)}
-        onChangeText={(text) => {
-          const parsedValue = Number(text)
-
-          if (!Number.isFinite(parsedValue)) {
-            return
-          }
-
-          onChangeValue(parsedValue)
-        }}
-        keyboardType="numeric"
-        textAlign="center"
-        style={styles.stepInput}
-      />
-
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => onChangeValue(value + 1)}
-        style={({ pressed }) => [styles.stepButton, pressed && styles.pressed]}
-      >
-        <Text style={styles.stepButtonText}>+</Text>
-      </Pressable>
-    </View>
-  )
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <View style={styles.sectionContent}>{children}</View>
-    </View>
-  )
-}
-
-function Field({ label, value, onChangeText, placeholder = '', autoCapitalize = 'none' }: { label: string; value: string; onChangeText: (text: string) => void; placeholder?: string; autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters' }) {
-  return (
-    <View style={styles.fieldWrapper}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={colors.muted}
-        autoCapitalize={autoCapitalize}
-        style={styles.input}
-      />
-    </View>
+      <Button onPress={() => void handleSave()} loading={isSaving}>
+        Speichern
+      </Button>
+    </Screen>
   )
 }
 
@@ -389,199 +236,3 @@ function clampNumber(value: number, min: number, max: number, fallback: number) 
 
   return Math.min(max, Math.max(min, Math.round(value)))
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  flex: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  container: {
-    flex: 1,
-    padding: 20,
-    gap: 20,
-    backgroundColor: colors.background,
-  },
-  topRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-  },
-  backButton: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  backButtonText: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  hero: {
-    gap: 8,
-  },
-  eyebrow: {
-    color: colors.accent,
-    textTransform: 'uppercase',
-    letterSpacing: 2,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  title: {
-    color: colors.text,
-    fontSize: 30,
-    fontWeight: '800',
-    lineHeight: 36,
-  },
-  section: {
-    gap: 10,
-  },
-  sectionTitle: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  sectionContent: {
-    gap: 16,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 22,
-    padding: 16,
-  },
-  fieldWrapper: {
-    gap: 8,
-  },
-  fieldLabel: {
-    color: colors.muted,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  characterRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  characterButton: {
-    flex: 1,
-    borderRadius: 16,
-    borderWidth: 1,
-    minHeight: 54,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 12,
-  },
-  characterButtonText: {
-    fontSize: 13,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  input: {
-    backgroundColor: colors.background,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 16,
-    color: colors.text,
-    fontSize: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  thresholdCard: {
-    gap: 12,
-    backgroundColor: colors.background,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 18,
-    padding: 14,
-  },
-  thresholdHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  thresholdLabel: {
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '700',
-    flex: 1,
-  },
-  thresholdValue: {
-    color: colors.accent,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  thresholdInput: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 14,
-    color: colors.text,
-    fontSize: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  stepInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  stepButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    borderColor: colors.border,
-    borderWidth: 1,
-    backgroundColor: colors.background,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepButtonText: {
-    color: colors.text,
-    fontSize: 22,
-    fontWeight: '800',
-    lineHeight: 22,
-    marginTop: -1,
-  },
-  stepInput: {
-    flex: 1,
-    minWidth: 84,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 14,
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '700',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  saveButton: {
-    backgroundColor: colors.accent,
-    borderRadius: 18,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  saveButtonDisabled: {
-    opacity: 0.7,
-  },
-  saveButtonText: {
-    color: colors.accentText,
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  emptyText: {
-    color: colors.muted,
-    fontSize: 15,
-  },
-  pressed: {
-    opacity: 0.86,
-  },
-})

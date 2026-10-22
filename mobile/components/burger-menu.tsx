@@ -1,4 +1,4 @@
-import { Colors } from '@/constants/colors'
+import Ionicons from '@expo/vector-icons/Ionicons'
 import { api } from '../../convex/_generated/api'
 import { useQuery } from 'convex/react'
 import { usePathname, useRouter, useSegments } from 'expo-router'
@@ -9,11 +9,9 @@ import {
   Easing,
   Pressable,
   StyleSheet,
-  Text,
   View,
 } from 'react-native'
-
-const colors = Colors.dark
+import { Text, useTheme, YStack } from 'tamagui'
 const SCREEN_WIDTH = Dimensions.get('window').width
 const PANEL_WIDTH = SCREEN_WIDTH * 0.7
 
@@ -28,6 +26,7 @@ export default function BurgerMenu({ deviceId, onboardingMode }: BurgerMenuProps
   const { user } = useUser()
   const { signOut } = useAuth()
   const router = useRouter()
+  const theme = useTheme()
   const pathname = usePathname()
   const segments = useSegments() as string[]
   const slideValue = useRef(new Animated.Value(0)).current
@@ -63,12 +62,12 @@ export default function BurgerMenu({ deviceId, onboardingMode }: BurgerMenuProps
 
   const navigateToPlantList = () => {
     closeMenu()
-    router.push('/(home)/plant-list')
+    router.push('/(home)/(tabs)/plant-list')
   }
 
   const navigateToGlobalSettings = () => {
     closeMenu()
-    router.push('/(home)/global-settings')
+    router.push('/(home)/(tabs)/global-settings')
   }
 
   const navigateToDevTools = () => {
@@ -91,45 +90,75 @@ export default function BurgerMenu({ deviceId, onboardingMode }: BurgerMenuProps
       ) : null}
 
       <View pointerEvents="box-none" style={styles.triggerRow}>
-        <Pressable accessibilityRole="button" onPress={() => setIsOpen((current) => !current)} style={styles.trigger}>
-          <View style={styles.burgerLine} />
-          <View style={styles.burgerLine} />
-          <View style={styles.burgerLine} />
-        </Pressable>
+        <YStack
+          role="button"
+          aria-label="Menü"
+          onPress={() => setIsOpen((current) => !current)}
+          width={44}
+          height={44}
+          borderRadius="$999"
+          borderWidth={1}
+          borderColor="$border"
+          backgroundColor="$surface press:$surfaceElevated"
+          alignItems="center"
+          justifyContent="center"
+        >
+          <Ionicons name={isOpen ? 'close' : 'menu'} size={22} color={theme.textPrimary?.val} />
+        </YStack>
       </View>
 
-      <Animated.View style={[styles.panel, { transform: [{ translateX }] }]}>
-        <View style={styles.panelContent}>
-          <Text style={styles.panelTitle}>Menü</Text>
+      <Animated.View
+        style={[
+          styles.panel,
+          {
+            backgroundColor: theme.surface?.val,
+            borderLeftColor: theme.border?.val,
+            transform: [{ translateX }],
+            // Eingefahren sonst sichtbarer Schatten am rechten Rand (v. a. im Light Mode).
+            shadowOpacity: isOpen ? 0.25 : 0,
+            elevation: isOpen ? 20 : 0,
+          },
+        ]}
+      >
+        <YStack paddingTop={72} paddingHorizontal="$20" gap="$4">
+          <Text fontFamily="$body" fontWeight="600" fontSize={12} letterSpacing={1.2} textTransform="uppercase" color="$textSecondary" marginBottom="$8">
+            Menü
+          </Text>
 
-          {isOnboardingMode ? null : (
-            <>
-              <Pressable style={styles.menuItem} onPress={navigateToPlantList}>
-                <Text style={styles.menuItemText}>Meine Pflanzen</Text>
-              </Pressable>
-            </>
-          )}
+          {isOnboardingMode ? null : <MenuItem label="Meine Pflanzen" onPress={navigateToPlantList} />}
+          <MenuItem label="Einstellungen" onPress={navigateToGlobalSettings} />
+          {!isOnboardingMode && isDevUser ? <MenuItem label="Dev Tools" onPress={navigateToDevTools} /> : null}
 
-          <Pressable style={styles.menuItem} onPress={navigateToGlobalSettings}>
-            <Text style={styles.menuItemText}>Einstellungen</Text>
-          </Pressable>
+          <YStack height={1} backgroundColor="$border" marginVertical="$8" />
 
-          {!isOnboardingMode && isDevUser ? (
-            <Pressable style={styles.menuItem} onPress={navigateToDevTools}>
-              <Text style={styles.menuItemText}>Dev Tools</Text>
-            </Pressable>
+          <MenuItem label="Ausloggen" onPress={handleLogout} tone="critical" />
+
+          {resolvedDeviceId ? (
+            <Text fontFamily="$body" fontSize={12} color="$textSecondary" marginTop="$12">
+              Gerät: {resolvedDeviceId}
+            </Text>
           ) : null}
-
-          <View style={styles.separator} />
-
-          <Pressable style={styles.menuItem} onPress={handleLogout}>
-            <Text style={[styles.menuItemText, styles.logoutText]}>Ausloggen</Text>
-          </Pressable>
-
-          {resolvedDeviceId ? <Text style={styles.deviceHint}>Device: {resolvedDeviceId}</Text> : null}
-        </View>
+        </YStack>
       </Animated.View>
     </View>
+  )
+}
+
+function MenuItem({ label, onPress, tone }: { label: string; onPress: () => void; tone?: 'critical' }) {
+  return (
+    <YStack
+      role="button"
+      onPress={onPress}
+      paddingVertical="$12"
+      paddingHorizontal="$8"
+      marginHorizontal={-8}
+      borderRadius="$8"
+      backgroundColor="transparent press:$surfaceElevated"
+    >
+      <Text fontFamily="$body" fontWeight="600" fontSize={16} color={tone === 'critical' ? '$critical' : '$textPrimary'}>
+        {label}
+      </Text>
+    </YStack>
   )
 }
 
@@ -141,6 +170,7 @@ const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
   },
+  // Abdunklung hinter dem Panel; in beiden Modi neutral schwarz.
   overlayFill: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.45)',
@@ -151,71 +181,16 @@ const styles = StyleSheet.create({
     right: 16,
     zIndex: 52,
   },
-  trigger: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    gap: 4,
-  },
-  burgerLine: {
-    width: 18,
-    height: 2,
-    borderRadius: 2,
-    backgroundColor: colors.text,
-  },
   panel: {
     position: 'absolute',
     top: 0,
     right: 0,
     width: PANEL_WIDTH,
     height: '100%',
-    backgroundColor: colors.background,
-    borderLeftColor: colors.border,
     borderLeftWidth: 1,
     shadowColor: '#000',
-    shadowOpacity: 0.25,
     shadowOffset: { width: -6, height: 0 },
     shadowRadius: 20,
-    elevation: 20,
     zIndex: 53,
-  },
-  panelContent: {
-    paddingTop: 72,
-    paddingHorizontal: 20,
-    gap: 12,
-  },
-  panelTitle: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 1.5,
-    marginBottom: 8,
-  },
-  menuItem: {
-    paddingVertical: 10,
-  },
-  menuItemText: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  logoutText: {
-    color: colors.danger,
-  },
-  separator: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: 8,
-  },
-  deviceHint: {
-    color: colors.muted,
-    fontSize: 12,
-    marginTop: 10,
   },
 })

@@ -1,61 +1,60 @@
-import { Colors } from '@/constants/colors'
+import Ionicons from '@expo/vector-icons/Ionicons'
 import { api } from '../../../convex/_generated/api'
-import BurgerMenu from '../../components/burger-menu'
+import { Badge, type BadgeTone } from '../../components/ui/badge'
+import { Button } from '../../components/ui/button'
+import { Card } from '../../components/ui/card'
+import { EmptyState } from '../../components/ui/empty-state'
+import { Screen } from '../../components/ui/screen'
+import { ScreenHeader } from '../../components/ui/screen-header'
+import { SectionLabel } from '../../components/ui/section-label'
+import { SegmentedControl } from '../../components/ui/segmented-control'
+import { type DeviceState, StatusBadge } from '../../components/ui/status-badge'
+import { TextField } from '../../components/ui/text-field'
 import { useMutation, useQuery } from 'convex/react'
 import { useDeviceCommand } from '@/hooks/use-device-command'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useEffect, useMemo, useState } from 'react'
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  useWindowDimensions,
-  View,
-} from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { type ComponentProps, useEffect, useMemo, useState } from 'react'
+import { Alert, useWindowDimensions } from 'react-native'
+import { Text, useTheme, XStack, YStack } from 'tamagui'
 import { Circle } from '@shopify/react-native-skia'
 import { CartesianChart, Line, useChartPressState } from 'victory-native'
 import { runOnJS, useAnimatedReaction } from 'react-native-reanimated'
 
-const colors = Colors.dark
 type SummaryState = 'ok' | 'warning' | 'critical' | 'cold' | 'hot' | 'dark' | 'bright'
 type MetricKey = 'moisture' | 'temperature' | 'light'
 type PeriodPreset = '7' | '14' | 'custom'
 type SensorStatusState = 'active' | 'inactive' | 'offline' | 'needs_remeasurement' | 'unknown'
+type IconName = ComponentProps<typeof Ionicons>['name']
 
 const HISTORY_QUERY_FROM_DATE = '1970-01-01'
 
+// Linienfarben kommen aus dem Theme (chartMoisture, chartTemperature, chartLight).
 const METRIC_CONFIGS = {
   moisture: {
-    emoji: '💧',
-    label: 'Feuchtigkeit',
+    icon: 'water-outline',
+    label: 'Feuchte',
     unit: '%',
-    lineColor: colors.success,
+    colorKey: 'chartMoisture',
     domain: [0, 100] as [number, number],
     tickValues: [0, 25, 50, 75, 100],
     getValue: (summary: HistoricalSummary) => summary.moisture_median,
     formatValue: (value: number) => `${formatValue(value)}%`,
   },
   temperature: {
-    emoji: '🌡️',
-    label: 'Lufttemperatur',
+    icon: 'thermometer-outline',
+    label: 'Temperatur',
     unit: '°C',
-    lineColor: '#FF9800',
+    colorKey: 'chartTemperature',
     domain: [10, 35] as [number, number],
     tickValues: [10, 15, 20, 25, 30, 35],
     getValue: (summary: HistoricalSummary) => summary.temperature_median,
     formatValue: (value: number) => `${formatValue(value)}°C`,
   },
   light: {
-    emoji: '☀️',
+    icon: 'sunny-outline',
     label: 'Licht',
     unit: 'Lux',
-    lineColor: '#2196F3',
+    colorKey: 'chartLight',
     domain: [0, 2000] as [number, number],
     tickValues: [0, 500, 1000, 1500, 2000],
     getValue: (summary: HistoricalSummary) => summary.light_level_median,
@@ -85,10 +84,10 @@ type TooltipState = {
 } | null
 
 type MetricConfig = {
-  emoji: string
+  icon: IconName
   label: string
   unit: string
-  lineColor: string
+  colorKey: 'chartMoisture' | 'chartTemperature' | 'chartLight'
   domain: [number, number]
   tickValues: number[]
   getValue: (summary: HistoricalSummary) => number | undefined
@@ -109,6 +108,7 @@ export default function StatusScreen() {
   const { useUser } = require('@clerk/expo') as typeof import('@clerk/expo')
   const { user } = useUser()
   const router = useRouter()
+  const theme = useTheme()
   const params = useLocalSearchParams<{ plant_id?: string }>()
   const { width } = useWindowDimensions()
 
@@ -155,7 +155,8 @@ export default function StatusScreen() {
         last_seen_formatted: 'unbekannt',
       }
   const todayDate = getUtcDate()
-  const chartWidth = width - 48
+  // Bildschirmrand 20 + Karteninnenabstand 16, je Seite
+  const chartWidth = width - 72
   const historyWindow = useMemo(() => ({ from: HISTORY_QUERY_FROM_DATE, to: todayDate }), [todayDate])
   const historicalSummaries = useQuery(
     api.plants.getHistoricalSummaries,
@@ -274,299 +275,190 @@ export default function StatusScreen() {
     setSelectedPeriod('custom')
   }
 
+
+  const lineColor = theme[activeMetricConfig.colorKey]?.val
+  const periodLabel =
+    selectedPeriod === 'custom'
+      ? `${formatDisplayDate(activeRange.from)} – ${formatDisplayDate(activeRange.to)}`
+      : selectedPeriod === '14'
+        ? 'Letzte 14 Tage'
+        : 'Letzte 7 Tage'
+
   return (
-    <SafeAreaView edges={['top']} style={styles.safeArea}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          <View style={styles.container}>
-            <BurgerMenu deviceId={resolvedPlant.deviceId ?? undefined} />
-            <View style={styles.headerRow}>
-              <View style={styles.header}>
-                <Text style={styles.eyebrow}>Planty Status</Text>
-                <Text style={styles.title}>{resolvedPlant.name}</Text>
-                <Text style={styles.deviceId}>{resolvedPlant.deviceId || 'Kein Sensor verbunden'}</Text>
-                {sensorStatusDisplay ? (
-                  <SensorStatusPill
-                    status={sensorStatusDisplay.status}
-                    lastSeenFormatted={sensorStatusDisplay.last_seen_formatted}
-                  />
-                ) : null}
-              </View>
-            </View>
+    <Screen scroll>
+      <YStack gap="$8">
+        <ScreenHeader eyebrow="Status" title={resolvedPlant.name} subtitle={resolvedPlant.deviceId || 'Kein Sensor verbunden'} onBack={() => router.back()} withMenu={false} />
+        {sensorStatusDisplay ? (
+          <StatusBadge
+            state={toDeviceState(sensorStatusDisplay.status)}
+            label={sensorStatusLabel(sensorStatusDisplay.status, sensorStatusDisplay.last_seen_formatted)}
+          />
+        ) : null}
+      </YStack>
 
-            {resolvedPlant.deviceId ? (
-              <>
-                <SensorActions deviceId={resolvedPlant.deviceId} onRemoved={() => router.replace('/(home)/plant-list')} />
+      {resolvedPlant.deviceId ? (
+        <>
+          {latestSummary ? (
+            <XStack gap="$8">
+              <MetricCard
+                icon="water-outline"
+                title="Feuchte"
+                value={`${formatValue(latestSummary.moisture_median)} %`}
+                badge={moistureBadge(latestSummary.moisture_state)}
+              />
+              {latestSummary.temperature_median !== undefined && latestSummary.temperature_state ? (
+                <MetricCard
+                  icon="thermometer-outline"
+                  title="Temperatur"
+                  value={`${formatValue(latestSummary.temperature_median)} °C`}
+                  badge={temperatureBadge(latestSummary.temperature_state)}
+                />
+              ) : (
+                <MetricCard icon="thermometer-outline" title="Temperatur" value="–" hint="Kein Wert vom Sensor" badge={{ tone: 'neutral', label: 'k. A.' }} />
+              )}
+              {latestSummary.light_level_median !== undefined && latestSummary.light_state ? (
+                <MetricCard
+                  icon="sunny-outline"
+                  title="Licht"
+                  value={`${formatValue(latestSummary.light_level_median)} lx`}
+                  badge={lightBadge(latestSummary.light_state)}
+                />
+              ) : (
+                <MetricCard icon="sunny-outline" title="Licht" value="–" hint="Kein Wert vom Sensor" badge={{ tone: 'neutral', label: 'k. A.' }} />
+              )}
+            </XStack>
+          ) : (
+            <Card>
+              <EmptyState icon="hourglass-outline" title="Noch keine Daten" text="Sobald dein Sensor zum ersten Mal misst, siehst du hier die Werte." />
+            </Card>
+          )}
 
-                <View style={styles.cardGrid}>
-                  {latestSummary ? (
-                    <>
-                      <MetricCard
-                        emoji="💧"
-                        title="Feuchtigkeit"
-                        value={`${formatValue(latestSummary.moisture_median)} %`}
-                        badgeLabel={latestSummary.moisture_state}
-                        badgeTone={moistureTone(latestSummary.moisture_state)}
-                      />
-                      {latestSummary.temperature_median !== undefined && latestSummary.temperature_state ? (
-                        <MetricCard
-                          emoji="🌡️"
-                          title="Lufttemperatur"
-                          value={`${formatValue(latestSummary.temperature_median)} °C`}
-                          badgeLabel={latestSummary.temperature_state}
-                          badgeTone={temperatureTone(latestSummary.temperature_state)}
-                        />
-                      ) : (
-                        <MetricCard emoji="🌡️" title="Lufttemperatur" value="–" hint="Kein Wert vom Sensor" badgeLabel="k. A." badgeTone="neutral" />
-                      )}
-                      {latestSummary.light_level_median !== undefined && latestSummary.light_state ? (
-                        <MetricCard
-                          emoji="☀️"
-                          title="Licht"
-                          value={`${formatValue(latestSummary.light_level_median)} Lux`}
-                          badgeLabel={latestSummary.light_state}
-                          badgeTone={lightTone(latestSummary.light_state)}
-                        />
-                      ) : (
-                        <MetricCard emoji="☀️" title="Licht" value="–" hint="Kein Wert vom Sensor" badgeLabel="k. A." badgeTone="neutral" />
-                      )}
-                    </>
-                  ) : (
-                    <View style={styles.emptyState}>
-                      <Text style={styles.emptyStateTitle}>Noch keine Daten</Text>
-                      <Text style={styles.emptyStateText}>Noch keine Daten – warte auf ersten Sensor-Report</Text>
-                    </View>
-                  )}
-                </View>
+          <Card>
+            <XStack alignItems="flex-end" justifyContent="space-between" gap="$8">
+              <YStack gap="$2">
+                <SectionLabel>Verlauf</SectionLabel>
+                <Text fontFamily="$body" fontSize={13} color="$textSecondary">
+                  {periodLabel}
+                </Text>
+              </YStack>
+              <Text fontFamily="$body" fontSize={13} color="$textSecondary">
+                {activeMetricConfig.unit}
+              </Text>
+            </XStack>
 
-                <View style={styles.chartCard}>
-                  <View style={styles.chartHeader}>
-                    <View style={styles.chartHeaderText}>
-                      <Text style={styles.sectionTitle}>Historische Daten</Text>
-                      <Text style={styles.sectionSubtitle}>
-                        {selectedPeriod === 'custom'
-                          ? `${formatDisplayDate(activeRange.from)} - ${formatDisplayDate(activeRange.to)}`
-                          : selectedPeriod === '14'
-                            ? 'Letzte 14 Tage'
-                            : 'Letzte 7 Tage'}
-                      </Text>
-                    </View>
-                    <Text style={styles.chartMeta}>{activeMetricConfig.unit}</Text>
-                  </View>
+            <SegmentedControl
+              options={(['moisture', 'temperature', 'light'] as MetricKey[]).map((metric) => ({ value: metric, label: METRIC_CONFIGS[metric].label }))}
+              value={selectedMetric}
+              onChange={setSelectedMetric}
+            />
 
-                  <View style={styles.metricToggleRow}>
-                    {(['moisture', 'temperature', 'light'] as MetricKey[]).map((metric) => {
-                      const config = METRIC_CONFIGS[metric]
-                      const isActive = selectedMetric === metric
-
-                      return (
-                        <Pressable
-                          key={metric}
-                          accessibilityRole="button"
-                          style={({ pressed }) => [
-                            styles.metricToggle,
-                            isActive
-                              ? [styles.metricToggleActive, { backgroundColor: config.lineColor, borderColor: config.lineColor }]
-                              : styles.metricToggleInactive,
-                            pressed && styles.metricTogglePressed,
-                          ]}
-                          onPress={() => setSelectedMetric(metric)}
-                        >
-                          <Text style={[styles.metricToggleText, isActive ? styles.metricToggleTextActive : styles.metricToggleTextInactive]}>
-                            {config.emoji} {config.label}
-                          </Text>
-                        </Pressable>
-                      )
-                    })}
-                  </View>
-
-                  <View style={styles.chartFrame}>
-                    {visibleSummaries.length > 0 && hasChartValues ? (
-                      <View style={styles.chartCanvas}>
-                        <CartesianChart
-                          data={chartData}
-                          xKey="day"
-                          yKeys={['value']}
-                          axisOptions={{
-                            font: undefined,
-                            tickCount: { x: 5, y: 5 },
-                            labelColor: '#91A79B',
-                            lineColor: colors.border,
-                            formatXLabel: (value) => value,
-                            formatYLabel: (value) => `${value}${activeMetricConfig.unit}`,
-                          }}
-                          domain={{ y: activeMetricConfig.domain }}
-                          domainPadding={{ left: 10, right: 10, top: 20, bottom: 10 }}
-                          chartPressState={chartPress.state}
-                          explicitSize={{ width: chartWidth, height: 220 }}
-                        >
-                          {({ points }) => (
-                            <>
-                              {/* Fehlende Werte unterbrechen die Linie (feste y-Domain, keine Umskalierung). */}
-                              <Line
-                                points={points.value}
-                                color={activeMetricConfig.lineColor}
-                                strokeWidth={2}
-                                connectMissingData={false}
-                                animate={{ type: 'timing', duration: 300 }}
-                              />
-                              {points.value.map((point, index) =>
-                                typeof point.y === 'number' ? (
-                                  <Circle
-                                    key={`${point.xValue}-${index}`}
-                                    cx={point.x}
-                                    cy={point.y}
-                                    r={4}
-                                    color={activeMetricConfig.lineColor}
-                                  />
-                                ) : null,
-                              )}
-                            </>
-                          )}
-                        </CartesianChart>
-
-                        {tooltipState ? (
-                          <View
-                            pointerEvents="none"
-                            style={[
-                              styles.chartTooltip,
-                              {
-                                left: clampNumber(tooltipState.x - 56, 8, chartWidth - 120),
-                                top: clampNumber(tooltipState.y - 60, 8, 220 - 68),
-                              },
-                            ]}
-                          >
-                            <Text style={styles.chartTooltipValue}>{formatMetricTooltipValue(selectedMetric, tooltipState.value)}</Text>
-                          </View>
-                        ) : null}
-                      </View>
-                    ) : visibleSummaries.length > 0 ? (
-                      <View style={styles.chartEmptyState}>
-                        <Text style={styles.emptyStateTitle}>Kein Wert vom Sensor</Text>
-                        <Text style={styles.emptyStateText}>
-                          In diesem Zeitraum hat dein Sensor keine Werte für {activeMetricConfig.label} geliefert.
-                        </Text>
-                      </View>
-                    ) : (
-                      <View style={styles.chartEmptyState}>
-                        <Text style={styles.emptyStateTitle}>Noch keine historischen Daten.</Text>
-                        <Text style={styles.emptyStateText}>
-                          Nutze den Zeitreise Dev Mode um Testdaten zu erstellen.
-                        </Text>
-                      </View>
+            <YStack minHeight={220} justifyContent="center">
+              {visibleSummaries.length > 0 && hasChartValues ? (
+                <YStack position="relative">
+                  <CartesianChart
+                    data={chartData}
+                    xKey="day"
+                    yKeys={['value']}
+                    axisOptions={{
+                      font: undefined,
+                      tickCount: { x: 5, y: 5 },
+                      labelColor: theme.textSecondary?.val,
+                      lineColor: theme.border?.val,
+                      formatXLabel: (value) => value,
+                      formatYLabel: (value) => `${value}${activeMetricConfig.unit}`,
+                    }}
+                    domain={{ y: activeMetricConfig.domain }}
+                    domainPadding={{ left: 10, right: 10, top: 20, bottom: 10 }}
+                    chartPressState={chartPress.state}
+                    explicitSize={{ width: chartWidth, height: 220 }}
+                  >
+                    {({ points }) => (
+                      <>
+                        {/* Fehlende Werte unterbrechen die Linie (feste y-Domain, keine Umskalierung). */}
+                        <Line points={points.value} color={lineColor} strokeWidth={2} connectMissingData={false} animate={{ type: 'timing', duration: 300 }} />
+                        {points.value.map((point, index) =>
+                          typeof point.y === 'number' ? (
+                            <Circle key={`${point.xValue}-${index}`} cx={point.x} cy={point.y} r={4} color={lineColor} />
+                          ) : null,
+                        )}
+                      </>
                     )}
-                  </View>
+                  </CartesianChart>
 
-                  <View style={styles.periodToggleRow}>
-                    {[
-                      { key: '7' as const, label: '7 Tage' },
-                      { key: '14' as const, label: '14 Tage' },
-                    ].map((period) => {
-                      const isActive = selectedPeriod === period.key
-
-                      return (
-                        <Pressable
-                          key={period.key}
-                          accessibilityRole="button"
-                          style={({ pressed }) => [
-                            styles.periodToggle,
-                            isActive
-                              ? [styles.periodToggleActive, { backgroundColor: colors.accent, borderColor: colors.accent }]
-                              : styles.periodToggleInactive,
-                            pressed && styles.metricTogglePressed,
-                          ]}
-                          onPress={() => {
-                            setSelectedPeriod(period.key)
-                          }}
-                        >
-                          <Text style={[styles.periodToggleText, isActive ? styles.periodToggleTextActive : styles.periodToggleTextInactive]}>
-                            {period.label}
-                          </Text>
-                        </Pressable>
-                      )
-                    })}
-                  </View>
-
-                  <View style={styles.customRangeBlock}>
-                    <View style={styles.customRangeRow}>
-                      <View style={styles.dateField}>
-                        <Text style={styles.dateLabel}>Von:</Text>
-                        <TextInput
-                          value={customFromInput}
-                          onChangeText={setCustomFromInput}
-                          placeholder="DD.MM.YYYY"
-                          placeholderTextColor={colors.muted}
-                          keyboardType="numbers-and-punctuation"
-                          autoCapitalize="none"
-                          autoCorrect={false}
-                          style={styles.dateInput}
-                        />
-                      </View>
-                      <View style={styles.dateField}>
-                        <Text style={styles.dateLabel}>Bis:</Text>
-                        <TextInput
-                          value={customToInput}
-                          onChangeText={setCustomToInput}
-                          placeholder="DD.MM.YYYY"
-                          placeholderTextColor={colors.muted}
-                          keyboardType="numbers-and-punctuation"
-                          autoCapitalize="none"
-                          autoCorrect={false}
-                          style={styles.dateInput}
-                        />
-                      </View>
-                    </View>
-
-                    <Text style={styles.rangeHint}>
-                      Verfügbar ab {formatDisplayDate(minCustomDate)} bis {formatDisplayDate(maxCustomDate)}
-                    </Text>
-
-                    <Pressable
-                      accessibilityRole="button"
-                      disabled={!isCustomRangeValid}
-                      style={({ pressed }) => [
-                        styles.applyButton,
-                        !isCustomRangeValid && styles.applyButtonDisabled,
-                        pressed && isCustomRangeValid && styles.applyButtonPressed,
-                      ]}
-                      onPress={handleApplyCustomRange}
+                  {tooltipState ? (
+                    <YStack
+                      pointerEvents="none"
+                      position="absolute"
+                      left={clampNumber(tooltipState.x - 56, 8, chartWidth - 120)}
+                      top={clampNumber(tooltipState.y - 60, 8, 220 - 68)}
+                      backgroundColor="$surfaceElevated"
+                      borderWidth={1}
+                      borderColor="$borderStrong"
+                      borderRadius="$8"
+                      paddingVertical="$6"
+                      paddingHorizontal="$12"
                     >
-                      <Text style={styles.applyButtonText}>Anwenden</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              </>
-            ) : (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyStateTitle}>Kein Sensor verbunden</Text>
-                <Text style={styles.emptyStateText}>Du kannst dieser Pflanze später einen Sensor zuweisen.</Text>
-                <Pressable
-                  accessibilityRole="button"
-                  style={({ pressed }) => [styles.assignButton, pressed && styles.assignButtonPressed]}
-                  onPress={() => router.push('/(home)/add-plant')}
-                >
-                  <Text style={styles.assignButtonText}>Sensor zuweisen</Text>
-                </Pressable>
-              </View>
-            )}
+                      <Text fontFamily="$body" fontWeight="700" fontSize={14} color="$textPrimary">
+                        {formatMetricTooltipValue(selectedMetric, tooltipState.value)}
+                      </Text>
+                    </YStack>
+                  ) : null}
+                </YStack>
+              ) : visibleSummaries.length > 0 ? (
+                <EmptyState icon="remove-circle-outline" title="Kein Wert vom Sensor" text={`In diesem Zeitraum hat dein Sensor keine Werte für ${activeMetricConfig.label} geliefert.`} />
+              ) : (
+                <EmptyState icon="analytics-outline" title="Noch kein Verlauf" text="Nutze die Zeitreise im Dev-Modus, um Testdaten zu erstellen." />
+              )}
+            </YStack>
 
-            <Pressable
-              accessibilityRole="button"
-              style={({ pressed }) => [styles.settingsButton, pressed && styles.settingsButtonPressed]}
-              onPress={handleOpenPlantSettings}
-              disabled={!resolvedPlant.plantId}
-            >
-              <Text style={styles.settingsButtonText}>⚙️ Pflanzen-Einstellungen</Text>
-            </Pressable>
+            <SegmentedControl
+              options={[
+                { value: '7' as const, label: '7 Tage' },
+                { value: '14' as const, label: '14 Tage' },
+              ]}
+              value={selectedPeriod === 'custom' ? null : selectedPeriod}
+              onChange={(period) => setSelectedPeriod(period)}
+            />
 
-            <View style={styles.footer}>
-              <Text style={styles.footerLabel}>Zuletzt aktualisiert</Text>
-              <Text style={styles.footerValue}>{lastUpdatedText || 'Noch keine Daten'}</Text>
-            </View>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+            <YStack gap="$8">
+              <XStack gap="$8">
+                <YStack flex={1}>
+                  <TextField label="Von" value={customFromInput} onChangeText={setCustomFromInput} placeholder="TT.MM.JJJJ" keyboardType="numbers-and-punctuation" autoCapitalize="none" />
+                </YStack>
+                <YStack flex={1}>
+                  <TextField label="Bis" value={customToInput} onChangeText={setCustomToInput} placeholder="TT.MM.JJJJ" keyboardType="numbers-and-punctuation" autoCapitalize="none" />
+                </YStack>
+              </XStack>
+              <Text fontFamily="$body" fontSize={12} color="$textSecondary">
+                Verfügbar vom {formatDisplayDate(minCustomDate)} bis {formatDisplayDate(maxCustomDate)}
+              </Text>
+              <Button variant="secondary" onPress={handleApplyCustomRange} disabled={!isCustomRangeValid}>
+                Zeitraum anwenden
+              </Button>
+            </YStack>
+          </Card>
+
+          <SensorActions deviceId={resolvedPlant.deviceId} onRemoved={() => router.replace('/(home)/(tabs)/plant-list')} />
+        </>
+      ) : (
+        <Card>
+          <EmptyState
+            icon="hardware-chip-outline"
+            title="Kein Sensor verbunden"
+            text="Du kannst dieser Pflanze später einen Sensor zuweisen."
+            action={{ label: 'Sensor zuweisen', onPress: () => router.push('/(home)/add-plant') }}
+          />
+        </Card>
+      )}
+
+      <Button variant="secondary" onPress={handleOpenPlantSettings} disabled={!resolvedPlant.plantId}>
+        Pflanzen-Einstellungen
+      </Button>
+
+      <Text fontFamily="$body" fontSize={12} color="$textSecondary" textAlign="center">
+        Zuletzt aktualisiert: {lastUpdatedText || 'noch keine Daten'}
+      </Text>
+    </Screen>
   )
 }
 
@@ -662,145 +554,93 @@ function SensorActions({ deviceId, onRemoved }: { deviceId: string; onRemoved: (
     )
   }
 
+
   return (
-    <View style={styles.chartCard}>
-      <Text style={styles.sectionTitle}>Sensor</Text>
+    <Card>
+      <SectionLabel>Sensor</SectionLabel>
 
-      <Pressable
-        accessibilityRole="button"
-        disabled={isBusy}
-        onPress={() => void handleMeasureNow()}
-        style={({ pressed }) => [styles.settingsButton, isBusy && styles.applyButtonDisabled, pressed && styles.settingsButtonPressed]}
-      >
-        <Text style={styles.settingsButtonText}>{activeAction === 'measure' ? 'Wird aktualisiert …' : 'Jetzt aktualisieren'}</Text>
-      </Pressable>
+      <Button variant="secondary" disabled={isBusy} onPress={() => void handleMeasureNow()}>
+        {activeAction === 'measure' ? 'Wird aktualisiert …' : 'Jetzt aktualisieren'}
+      </Button>
 
-      <Pressable
-        accessibilityRole="button"
-        disabled={isBusy}
-        onPress={() => setIsWifiFormOpen((open) => !open)}
-        style={({ pressed }) => [styles.settingsButton, isBusy && styles.applyButtonDisabled, pressed && styles.settingsButtonPressed]}
-      >
-        <Text style={styles.settingsButtonText}>{activeAction === 'wifi' ? 'WLAN wird geändert …' : 'WLAN ändern'}</Text>
-      </Pressable>
+      <Button variant="secondary" disabled={isBusy} onPress={() => setIsWifiFormOpen((open) => !open)}>
+        {activeAction === 'wifi' ? 'WLAN wird geändert …' : 'WLAN ändern'}
+      </Button>
 
       {isWifiFormOpen ? (
-        <View style={styles.sensorWifiForm}>
-          <Text style={styles.sectionSubtitle}>
+        <YStack gap="$12" paddingTop="$4">
+          <Text fontFamily="$body" fontSize={13} lineHeight="$3" color="$textSecondary">
             Das geht nur, solange dein Sensor noch im alten WLAN online ist. Ist das alte WLAN schon weg, richte ihn per USB neu ein: „Sensor hinzufügen“ in der Pflanzenliste.
           </Text>
-          <View style={styles.dateField}>
-            <Text style={styles.dateLabel}>Neues WLAN (SSID)</Text>
-            <TextInput
-              value={wifiSsid}
-              onChangeText={setWifiSsid}
-              placeholder="WLAN-Name"
-              placeholderTextColor={colors.muted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="off"
-              style={styles.dateInput}
-            />
-          </View>
-          <View style={styles.dateField}>
-            <Text style={styles.dateLabel}>WLAN-Passwort</Text>
-            <TextInput
-              value={wifiPassword}
-              onChangeText={setWifiPassword}
-              placeholder="Passwort"
-              placeholderTextColor={colors.muted}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="password"
-              textContentType="password"
-              style={styles.dateInput}
-            />
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            disabled={!wifiSsid.trim() || isBusy}
-            onPress={() => void handleSubmitWifi()}
-            style={({ pressed }) => [
-              styles.applyButton,
-              (!wifiSsid.trim() || isBusy) && styles.applyButtonDisabled,
-              pressed && styles.applyButtonPressed,
-            ]}
-          >
-            <Text style={styles.applyButtonText}>WLAN übernehmen</Text>
-          </Pressable>
-        </View>
+          <TextField label="Neues WLAN (SSID)" value={wifiSsid} onChangeText={setWifiSsid} placeholder="WLAN-Name" autoCapitalize="none" autoComplete="off" />
+          <TextField
+            label="WLAN-Passwort"
+            value={wifiPassword}
+            onChangeText={setWifiPassword}
+            placeholder="Passwort"
+            secureTextEntry
+            autoCapitalize="none"
+            autoComplete="password"
+            textContentType="password"
+          />
+          <Button onPress={() => void handleSubmitWifi()} disabled={!wifiSsid.trim() || isBusy}>
+            WLAN übernehmen
+          </Button>
+        </YStack>
       ) : null}
 
       {message ? (
         <Text
-          style={[
-            styles.sensorMessage,
-            message.tone === 'success' ? styles.sensorMessageSuccess : message.tone === 'error' ? styles.sensorMessageError : null,
-          ]}
+          fontFamily="$body"
+          fontSize={14}
+          lineHeight="$4"
+          color={message.tone === 'success' ? '$success' : message.tone === 'error' ? '$critical' : '$textSecondary'}
         >
           {message.text}
         </Text>
       ) : null}
 
-      <Pressable
-        accessibilityRole="button"
-        disabled={activeAction === 'remove'}
-        onPress={handleRemove}
-        style={({ pressed }) => [styles.settingsButton, styles.sensorRemoveButton, pressed && styles.settingsButtonPressed]}
-      >
-        <Text style={[styles.settingsButtonText, styles.sensorRemoveText]}>
-          {activeAction === 'remove' ? 'Wird entfernt …' : 'Sensor entfernen'}
-        </Text>
-      </Pressable>
-    </View>
+      <Button variant="danger" disabled={activeAction === 'remove'} onPress={handleRemove}>
+        {activeAction === 'remove' ? 'Wird entfernt …' : 'Sensor entfernen'}
+      </Button>
+    </Card>
   )
 }
 
 function MetricCard({
-  emoji,
+  icon,
   title,
   value,
   hint,
-  badgeLabel,
-  badgeTone,
+  badge,
 }: {
-  emoji: string
+  icon: IconName
   title: string
   value: string
   hint?: string
-  badgeLabel: string
-  // neutral: kein Wert vom Sensor, bewusst weder Warn- noch Fehlerfarbe.
-  badgeTone: 'success' | 'warning' | 'critical' | 'neutral'
+  badge: { tone: BadgeTone; label: string }
 }) {
-  const badgeStyle =
-    badgeTone === 'success'
-      ? styles.badgeSuccess
-      : badgeTone === 'warning'
-        ? styles.badgeWarning
-        : badgeTone === 'neutral'
-          ? styles.badgeNeutral
-          : styles.badgeCritical
-
-  const badgeTextStyle =
-    badgeTone === 'success'
-      ? styles.badgeSuccessText
-      : badgeTone === 'warning'
-        ? styles.badgeWarningText
-        : badgeTone === 'neutral'
-          ? styles.badgeNeutralText
-          : styles.badgeCriticalText
+  const theme = useTheme()
+  const isEmpty = badge.tone === 'neutral'
 
   return (
-    <View style={styles.card}>
-      <Text style={styles.cardEmoji}>{emoji}</Text>
-      <Text style={styles.cardTitle}>{title}</Text>
-      <Text style={[styles.cardValue, badgeTone === 'neutral' && styles.cardValueMuted]}>{value}</Text>
-      {hint ? <Text style={styles.cardHint}>{hint}</Text> : null}
-      <View style={[styles.badge, badgeStyle]}>
-        <Text style={[styles.badgeText, badgeTextStyle]}>{badgeTone === 'neutral' ? badgeLabel : badgeLabel.toUpperCase()}</Text>
-      </View>
-    </View>
+    <YStack flex={1} backgroundColor="$surface" borderWidth={1} borderColor="$border" borderRadius="$16" padding="$12" gap="$8">
+      <XStack alignItems="center" gap="$4">
+        <Ionicons name={icon} size={16} color={theme.textSecondary?.val} />
+        <Text fontFamily="$body" fontSize={12} color="$textSecondary" numberOfLines={1}>
+          {title}
+        </Text>
+      </XStack>
+      <Text fontFamily="$heading" fontSize={24} color={isEmpty ? '$textSecondary' : '$textPrimary'} numberOfLines={1} adjustsFontSizeToFit>
+        {value}
+      </Text>
+      {hint ? (
+        <Text fontFamily="$body" fontSize={11} color="$textSecondary">
+          {hint}
+        </Text>
+      ) : null}
+      <Badge tone={badge.tone} label={badge.label} dot={false} />
+    </YStack>
   )
 }
 
@@ -905,539 +745,34 @@ function clampNumber(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
 }
 
-function moistureTone(state: SummaryState) {
-  if (state === 'ok') {
-    return 'success'
-  }
-
-  if (state === 'critical') {
-    return 'critical'
-  }
-
-  return 'warning'
+function moistureBadge(state: SummaryState): { tone: BadgeTone; label: string } {
+  if (state === 'ok') return { tone: 'success', label: 'Gut' }
+  if (state === 'critical') return { tone: 'critical', label: 'Durstig' }
+  return { tone: 'warning', label: 'Etwas trocken' }
 }
 
-function temperatureTone(state: SummaryState) {
-  if (state === 'ok') {
-    return 'success'
-  }
-
-  if (state === 'hot') {
-    return 'critical'
-  }
-
-  return 'warning'
+function temperatureBadge(state: SummaryState): { tone: BadgeTone; label: string } {
+  if (state === 'ok') return { tone: 'success', label: 'Gut' }
+  if (state === 'hot') return { tone: 'critical', label: 'Zu warm' }
+  return { tone: 'warning', label: 'Zu kalt' }
 }
 
-function lightTone(state: SummaryState) {
-  if (state === 'ok') {
-    return 'success'
-  }
-
-  return 'warning'
+function lightBadge(state: SummaryState): { tone: BadgeTone; label: string } {
+  if (state === 'ok') return { tone: 'success', label: 'Gut' }
+  if (state === 'bright') return { tone: 'warning', label: 'Zu hell' }
+  return { tone: 'warning', label: 'Zu dunkel' }
 }
 
-function SensorStatusPill({
-  status,
-  lastSeenFormatted,
-}: {
-  status: SensorStatusState
-  lastSeenFormatted: string
-}) {
-  const config = getSensorStatusConfig(status)
-  const label =
-    status === 'needs_remeasurement'
-      ? '⚠️ Sensor braucht neue Messung'
-      : status === 'active'
-      ? `Sensor aktiv · zuletzt ${lastSeenFormatted}`
-      : status === 'inactive'
-        ? `Sensor inaktiv · zuletzt ${lastSeenFormatted}`
-        : status === 'offline'
-          ? `Sensor offline · zuletzt ${lastSeenFormatted}`
-          : 'Sensor Status unbekannt'
-
-  return (
-    <View style={[styles.sensorStatusPill, { backgroundColor: config.background, borderColor: config.border }]}> 
-      <Text style={[styles.sensorStatusText, { color: config.text }]}>{status === 'needs_remeasurement' ? label : `${config.emoji} ${label}`}</Text>
-    </View>
-  )
+function toDeviceState(status: SensorStatusState): DeviceState {
+  if (status === 'active' || status === 'offline' || status === 'needs_remeasurement') return status
+  if (status === 'inactive') return 'offline'
+  return 'unknown'
 }
 
-function getSensorStatusConfig(status: SensorStatusState) {
-  if (status === 'active') {
-    return {
-      emoji: '🟢',
-      background: withAlpha(Colors.dark.success, 0.12),
-      border: withAlpha(Colors.dark.success, 0.22),
-      text: Colors.dark.success,
-    }
-  }
-
-  if (status === 'inactive') {
-    return {
-      emoji: '🟡',
-      background: withAlpha(Colors.dark.warning, 0.14),
-      border: withAlpha(Colors.dark.warning, 0.24),
-      text: Colors.dark.warning,
-    }
-  }
-
-  if (status === 'offline') {
-    return {
-      emoji: '🔴',
-      background: withAlpha(Colors.dark.critical, 0.14),
-      border: withAlpha(Colors.dark.critical, 0.24),
-      text: Colors.dark.critical,
-    }
-  }
-
-  if (status === 'needs_remeasurement') {
-    return {
-      emoji: '⚠️',
-      background: withAlpha(Colors.dark.warning, 0.14),
-      border: withAlpha(Colors.dark.warning, 0.24),
-      text: Colors.dark.warning,
-    }
-  }
-
-  return {
-    emoji: '❓',
-    background: withAlpha(Colors.dark.muted, 0.12),
-    border: withAlpha(Colors.dark.muted, 0.22),
-    text: Colors.dark.muted,
-  }
+function sensorStatusLabel(status: SensorStatusState, lastSeen: string) {
+  if (status === 'needs_remeasurement') return 'Sensor braucht eine neue Messung'
+  if (status === 'active') return `Aktiv · zuletzt ${lastSeen}`
+  if (status === 'inactive') return `Inaktiv · zuletzt ${lastSeen}`
+  if (status === 'offline') return `Offline · zuletzt ${lastSeen}`
+  return 'Status unbekannt'
 }
-
-function withAlpha(hexColor: string, alpha: number) {
-  const normalized = hexColor.replace('#', '')
-  const value = normalized.length === 3
-    ? normalized
-        .split('')
-        .map((character) => character + character)
-        .join('')
-    : normalized
-
-  const red = Number.parseInt(value.slice(0, 2), 16)
-  const green = Number.parseInt(value.slice(2, 4), 16)
-  const blue = Number.parseInt(value.slice(4, 6), 16)
-
-  return `rgba(${red}, ${green}, ${blue}, ${alpha})`
-}
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  flex: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-    padding: 20,
-    gap: 20,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 16,
-    paddingTop: 8,
-  },
-  header: {
-    gap: 8,
-    flex: 1,
-  },
-  eyebrow: {
-    color: colors.accent,
-    textTransform: 'uppercase',
-    letterSpacing: 2,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  title: {
-    color: colors.text,
-    fontSize: 30,
-    fontWeight: '800',
-    lineHeight: 36,
-  },
-  deviceId: {
-    color: colors.muted,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  sensorStatusPill: {
-    alignSelf: 'flex-start',
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    marginTop: 2,
-  },
-  sensorStatusText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  settingsButton: {
-    width: '100%',
-    backgroundColor: 'transparent',
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  settingsButtonPressed: {
-    opacity: 0.84,
-  },
-  settingsButtonText: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  cardGrid: {
-    gap: 12,
-  },
-  chartCard: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 22,
-    padding: 16,
-    gap: 14,
-  },
-  chartHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  chartHeaderText: {
-    gap: 4,
-    flex: 1,
-  },
-  sectionTitle: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  sectionSubtitle: {
-    color: colors.muted,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  chartMeta: {
-    color: colors.accent,
-    fontSize: 13,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    paddingTop: 2,
-  },
-  metricToggleRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  metricToggle: {
-    flex: 1,
-    minHeight: 42,
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  metricToggleActive: {
-    borderWidth: 1,
-  },
-  metricToggleInactive: {
-    backgroundColor: 'transparent',
-    borderColor: colors.border,
-  },
-  metricTogglePressed: {
-    opacity: 0.86,
-  },
-  metricToggleText: {
-    fontSize: 12,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  metricToggleTextActive: {
-    color: '#FFFFFF',
-  },
-  metricToggleTextInactive: {
-    color: colors.text,
-  },
-  chartFrame: {
-    minHeight: 220,
-    alignItems: 'stretch',
-    justifyContent: 'center',
-  },
-  chartCanvas: {
-    position: 'relative',
-  },
-  chartEmptyState: {
-    minHeight: 220,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 20,
-  },
-  periodToggleRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  periodToggle: {
-    flex: 1,
-    minHeight: 42,
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  periodToggleActive: {
-    borderWidth: 1,
-  },
-  periodToggleInactive: {
-    backgroundColor: 'transparent',
-    borderColor: colors.border,
-  },
-  periodToggleText: {
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  periodToggleTextActive: {
-    color: '#FFFFFF',
-  },
-  periodToggleTextInactive: {
-    color: colors.text,
-  },
-  customRangeBlock: {
-    gap: 10,
-  },
-  customRangeRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  dateField: {
-    flex: 1,
-    gap: 6,
-  },
-  dateLabel: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  dateInput: {
-    backgroundColor: colors.background,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 14,
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '600',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-  },
-  rangeHint: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  applyButton: {
-    alignSelf: 'flex-start',
-    backgroundColor: colors.accent,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  applyButtonDisabled: {
-    opacity: 0.45,
-  },
-  sensorWifiForm: {
-    gap: 12,
-  },
-  sensorMessage: {
-    color: colors.muted,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  sensorMessageSuccess: {
-    color: colors.success,
-  },
-  sensorMessageError: {
-    color: colors.critical,
-  },
-  sensorRemoveButton: {
-    borderColor: colors.critical,
-  },
-  sensorRemoveText: {
-    color: colors.critical,
-  },
-  applyButtonPressed: {
-    opacity: 0.88,
-  },
-  applyButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  chartTooltip: {
-    position: 'absolute',
-    minWidth: 118,
-    maxWidth: 160,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 2,
-    shadowColor: '#000000',
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 5,
-  },
-  chartTooltipValue: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  chartTooltipDate: {
-    color: colors.muted,
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 22,
-    padding: 18,
-    gap: 10,
-  },
-  cardEmoji: {
-    fontSize: 22,
-  },
-  cardTitle: {
-    color: colors.muted,
-    fontSize: 13,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  cardValue: {
-    color: colors.text,
-    fontSize: 28,
-    fontWeight: '800',
-  },
-  badge: {
-    alignSelf: 'flex-start',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  badgeSuccess: {
-    backgroundColor: colors.success,
-  },
-  badgeWarning: {
-    backgroundColor: colors.warning,
-  },
-  badgeCritical: {
-    backgroundColor: colors.critical,
-  },
-  badgeSuccessText: {
-    color: colors.successText,
-  },
-  badgeWarningText: {
-    color: colors.warningText,
-  },
-  badgeCriticalText: {
-    color: colors.criticalText,
-  },
-  badgeNeutral: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  badgeNeutralText: {
-    color: colors.muted,
-    textTransform: 'none',
-  },
-  cardValueMuted: {
-    color: colors.muted,
-  },
-  cardHint: {
-    color: colors.muted,
-    fontSize: 13,
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 24,
-  },
-  emptyStateTitle: {
-    color: colors.text,
-    fontSize: 24,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  emptyStateText: {
-    color: colors.muted,
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: 'center',
-  },
-  assignButton: {
-    marginTop: 6,
-    backgroundColor: colors.accent,
-    borderRadius: 16,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-  },
-  assignButtonPressed: {
-    opacity: 0.88,
-  },
-  assignButtonText: {
-    color: colors.accentText,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  footer: {
-    marginTop: 'auto',
-    paddingBottom: 8,
-    gap: 4,
-  },
-  footerLabel: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  footerValue: {
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-})

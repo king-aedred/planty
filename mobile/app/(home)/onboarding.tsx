@@ -1,16 +1,17 @@
-import { Colors } from '@/constants/colors'
 import { api } from '../../../convex/_generated/api'
 import BurgerMenu from '../../components/burger-menu'
 import { BleProvisioning } from '../../components/onboarding/ble-provisioning'
 import { useMutation, useQuery } from 'convex/react'
 import { useRouter } from 'expo-router'
-import { Alert, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableWithoutFeedback, View } from 'react-native'
+import { Alert } from 'react-native'
 import { useState } from 'react'
-import {
-} from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-
-const colors = Colors.dark
+import { SpeciesPicker } from '../../components/plants/species-picker'
+import { Button } from '../../components/ui/button'
+import { Card } from '../../components/ui/card'
+import { ErrorNotice } from '../../components/ui/error-notice'
+import { Screen } from '../../components/ui/screen'
+import { ScreenHeader } from '../../components/ui/screen-header'
+import { TextField } from '../../components/ui/text-field'
 
 export default function OnboardingScreen() {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -106,259 +107,39 @@ export default function OnboardingScreen() {
     }
   }
 
+  const canSubmit = Boolean(selectedSpecies || (isManualMode && manualPlantName.trim())) && sensorRegistered
+
   return (
-    <SafeAreaView edges={['top']} style={styles.safeArea}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-          <ScrollView
-            style={styles.flex}
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-          >
-            <View style={styles.container}>
-              <BurgerMenu onboardingMode={true} />
-              <View style={styles.hero}>
-                <Text style={styles.eyebrow}>Planty</Text>
-                <Text style={styles.title}>Deine erste Pflanze 🌱</Text>
-                <Text style={styles.subtitle}>Suche eine Pflanze in der Datenbank oder gib sie manuell ein.</Text>
-              </View>
+    <Screen scroll>
+      <BurgerMenu onboardingMode={true} />
+      <ScreenHeader
+        eyebrow="Callgreen"
+        title="Deine erste Pflanze"
+        subtitle="Verbinde deinen Sensor und such dann deine Pflanze aus der Datenbank oder gib sie selbst ein."
+      />
 
-              <View style={styles.form}>
-                <BleProvisioning onProvisioned={handleSensorProvisioned} />
+      <BleProvisioning onProvisioned={handleSensorProvisioned} />
 
-                <View style={styles.field}>
-                  <Text style={styles.label}>Pflanze suchen...</Text>
-                  <TextInput
-                    value={speciesSearch}
-                    onChangeText={handleSpeciesSearchChange}
-                    placeholder="Pflanze suchen..."
-                    placeholderTextColor={colors.muted}
-                    style={styles.input}
-                    autoCapitalize="words"
-                    autoCorrect={false}
-                  />
-                </View>
+      <Card>
+        <SpeciesPicker
+          search={speciesSearch}
+          onSearchChange={handleSpeciesSearchChange}
+          results={speciesResults}
+          selected={selectedSpecies}
+          onSelect={handleSelectSpecies}
+          onManualEntry={handleManualEntry}
+        />
 
-                {selectedSpecies ? (
-                  <View style={styles.selectedSpeciesCard}>
-                    <View style={styles.selectedSpeciesTextBlock}>
-                      <Text style={styles.selectedSpeciesTitle}>{selectedSpecies.common_name}</Text>
-                      <Text style={styles.selectedSpeciesSubtitle}>{selectedSpecies.name}</Text>
-                    </View>
-                    <Text style={styles.selectedSpeciesCheck}>✓</Text>
-                  </View>
-                ) : (
-                  <View style={styles.speciesResults}>
-                    {speciesResults.map((species) => (
-                      <Pressable
-                        key={species.id}
-                        accessibilityRole="button"
-                        onPress={() => handleSelectSpecies(species)}
-                        style={({ pressed }) => [styles.speciesItem, pressed && styles.speciesItemPressed]}
-                      >
-                        <View style={styles.speciesItemTextBlock}>
-                          <Text style={styles.speciesItemTitle}>{species.common_name}</Text>
-                          <Text style={styles.speciesItemSubtitle}>{species.name}</Text>
-                        </View>
-                      </Pressable>
-                    ))}
+        {isManualMode ? (
+          <TextField label="Pflanzenname" value={manualPlantName} onChangeText={setManualPlantName} placeholder="z. B. Monstera" autoCapitalize="words" />
+        ) : null}
 
-                    {speciesSearch.trim() && speciesResults.length === 0 ? (
-                      <Pressable accessibilityRole="button" onPress={handleManualEntry} style={styles.manualCta}>
-                        <Text style={styles.manualCtaText}>Nicht dabei? Namen manuell eingeben</Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
-                )}
+        {errorMessage ? <ErrorNotice message={errorMessage} /> : null}
 
-                {isManualMode ? (
-                  <View style={styles.field}>
-                    <Text style={styles.label}>Pflanzenname</Text>
-                    <TextInput
-                      value={manualPlantName}
-                      onChangeText={setManualPlantName}
-                      placeholder="z. B. Monstera"
-                      placeholderTextColor={colors.muted}
-                      style={styles.input}
-                      autoCapitalize="words"
-                      returnKeyType="next"
-                    />
-                  </View>
-                ) : null}
-
-                {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
-
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={!(selectedSpecies || (isManualMode && manualPlantName.trim())) || !sensorRegistered || isSubmitting}
-                  style={({ pressed }) => [
-                    styles.button,
-                    (pressed || isSubmitting) && styles.buttonPressed,
-                    (!(selectedSpecies || (isManualMode && manualPlantName.trim())) || !sensorRegistered) && styles.buttonDisabled,
-                  ]}
-                  onPress={handleRegisterPlant}
-                >
-                  <Text style={styles.buttonText}>{isSubmitting ? 'Registriere…' : 'Pflanze registrieren'}</Text>
-                </Pressable>
-              </View>
-            </View>
-          </ScrollView>
-        </TouchableWithoutFeedback>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        <Button onPress={() => void handleRegisterPlant()} disabled={!canSubmit} loading={isSubmitting}>
+          Pflanze anlegen
+        </Button>
+      </Card>
+    </Screen>
   )
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  flex: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-    padding: 20,
-    justifyContent: 'space-between',
-  },
-  hero: {
-    flex: 1,
-    justifyContent: 'center',
-    gap: 12,
-  },
-  eyebrow: {
-    color: colors.accent,
-    textTransform: 'uppercase',
-    letterSpacing: 2,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  title: {
-    color: colors.text,
-    fontSize: 32,
-    fontWeight: '800',
-    lineHeight: 38,
-  },
-  subtitle: {
-    color: colors.muted,
-    fontSize: 16,
-    lineHeight: 22,
-    maxWidth: 340,
-  },
-  form: {
-    gap: 14,
-    paddingBottom: 8,
-  },
-  field: {
-    gap: 8,
-  },
-  label: {
-    color: colors.muted,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  input: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 18,
-    color: colors.text,
-    fontSize: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  speciesResults: {
-    gap: 10,
-  },
-  speciesItem: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  speciesItemPressed: {
-    opacity: 0.88,
-  },
-  speciesItemTextBlock: {
-    gap: 2,
-  },
-  speciesItemTitle: {
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  speciesItemSubtitle: {
-    color: colors.muted,
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  selectedSpeciesCard: {
-    backgroundColor: colors.surface,
-    borderColor: colors.success,
-    borderWidth: 1,
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  selectedSpeciesTextBlock: {
-    flex: 1,
-    gap: 2,
-  },
-  selectedSpeciesTitle: {
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  selectedSpeciesSubtitle: {
-    color: colors.muted,
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  selectedSpeciesCheck: {
-    color: colors.success,
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  manualCta: {
-    paddingVertical: 2,
-  },
-  manualCtaText: {
-    color: colors.success,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  error: {
-    color: colors.danger,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  button: {
-    backgroundColor: colors.accent,
-    borderRadius: 18,
-    paddingVertical: 15,
-    alignItems: 'center',
-    marginTop: 6,
-  },
-  buttonPressed: {
-    opacity: 0.88,
-  },
-  buttonDisabled: {
-    opacity: 0.55,
-  },
-  buttonText: {
-    color: colors.accentText,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-})
