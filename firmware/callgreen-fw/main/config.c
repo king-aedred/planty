@@ -81,7 +81,8 @@ static void take_f(const cJSON *obj, const char *key, float lo, float hi, float 
 {
     const cJSON *it = cJSON_GetObjectItemCaseSensitive(obj, key);
     if (!it) return;
-    if (!cJSON_IsNumber(it) || it->valuedouble < lo || it->valuedouble > hi) {
+    // Grenzen als float (4.2f < 4.2): kleine Toleranz, sonst wird der erlaubte Randwert abgelehnt
+    if (!cJSON_IsNumber(it) || it->valuedouble < lo - 0.001 || it->valuedouble > hi + 0.001) {
         ESP_LOGW(TAG, "config.%s ungueltig, ignoriert", key);
         st->invalid++;
         return;
