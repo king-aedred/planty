@@ -22,7 +22,7 @@
 static const char *TAG = "cycle";
 
 #define WIFI_TIMEOUT_MS      15000
-#define NTP_SYNC_TIMEOUT_MS  5000    // Warten auf echten Sync, wenn die Uhr schon laeuft
+#define NTP_SYNC_TIMEOUT_MS  9000    // Warten auf echten Sync, wenn die Uhr schon laeuft (bis zu 5 Anfragen)
 #define NTP_TIMEOUT_MS       15000   // Warten, wenn die Uhr noch gar nicht gesetzt ist
 #define SAMPLE_INTERVAL_MS   50
 #define BH1750_FIRST_MS      180     // erste Messung nach Mode-Befehl

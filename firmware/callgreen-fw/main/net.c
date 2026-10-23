@@ -24,6 +24,7 @@ static const char *TAG = "net";
 
 #define TZ_INFO             "CET-1CEST,M3.5.0,M10.5.0/3"
 #define HTTP_TIMEOUT_MS     15000
+#define SNTP_RESEND_MS      2000    // SNTP-Anfrage neu senden, wenn bis dahin keine Antwort kam
 #define HTTP_RETRY_DELAY_MS 1000
 #define URL_MAX             160
 
@@ -312,15 +313,29 @@ time_sync_result_t net_time_sync(uint32_t sync_timeout_ms, uint32_t invalid_time
 
     // Ohne 32-kHz-Quarz driftet die Uhr im Deep Sleep um einige Prozent,
     // daher auf einen echten Sync warten und nur bei Timeout auf die Uhr zurueckfallen.
+    // lwIP fragt nach einer verlorenen Anfrage erst nach SNTP_RECV_TIMEOUT (15 s) erneut.
+    // Direkt nach dem Verbinden geht die erste Anfrage im Akkubetrieb oft verloren,
+    // deshalb die Anfrage selbst in kurzen Abstaenden neu anstossen.
     int64_t start = esp_timer_get_time();
+    int64_t last_restart = start;
+    int attempts = 1;
     for (;;) {
         if (esp_sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED) {
+            ESP_LOGI(TAG, "SNTP-Sync nach %lu ms (%d. Anfrage)",
+                     (unsigned long)((esp_timer_get_time() - start) / 1000), attempts);
             return TIME_SYNCED;
         }
-        uint32_t elapsed_ms = (uint32_t)((esp_timer_get_time() - start) / 1000);
+        int64_t now = esp_timer_get_time();
+        uint32_t elapsed_ms = (uint32_t)((now - start) / 1000);
         uint32_t limit_ms = clock_valid() ? sync_timeout_ms : invalid_timeout_ms;
         if (elapsed_ms >= limit_ms) {
+            ESP_LOGW(TAG, "SNTP: kein Sync nach %lu ms und %d Anfragen", (unsigned long)elapsed_ms, attempts);
             return clock_valid() ? TIME_FALLBACK : TIME_INVALID;
+        }
+        if (now - last_restart >= (int64_t)SNTP_RESEND_MS * 1000) {
+            esp_sntp_restart();
+            last_restart = now;
+            attempts++;
         }
         vTaskDelay(pdMS_TO_TICKS(100));
     }
