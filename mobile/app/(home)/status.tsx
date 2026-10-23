@@ -9,6 +9,7 @@ import { ScreenHeader } from '../../components/ui/screen-header'
 import { SectionLabel } from '../../components/ui/section-label'
 import { SegmentedControl } from '../../components/ui/segmented-control'
 import { type DeviceState, StatusBadge } from '../../components/ui/status-badge'
+import { BatteryIndicator } from '../../components/ui/battery-indicator'
 import { TextField } from '../../components/ui/text-field'
 import { useMutation, useQuery } from 'convex/react'
 import { useDeviceCommand } from '@/hooks/use-device-command'
@@ -145,6 +146,8 @@ export default function StatusScreen() {
         status: SensorStatusState
         last_seen: number | null
         last_seen_formatted: string
+        battery_pct?: number | null
+        battery_charging?: boolean
       }
     | undefined
   const sensorStatusDisplay = resolvedPlant.deviceId
@@ -289,10 +292,13 @@ export default function StatusScreen() {
       <YStack gap="$8">
         <ScreenHeader eyebrow="Status" title={resolvedPlant.name} subtitle={resolvedPlant.deviceId || 'Kein Sensor verbunden'} onBack={() => router.back()} withMenu={false} />
         {sensorStatusDisplay ? (
-          <StatusBadge
-            state={toDeviceState(sensorStatusDisplay.status)}
-            label={sensorStatusLabel(sensorStatusDisplay.status, sensorStatusDisplay.last_seen_formatted)}
-          />
+          <XStack alignItems="center" justifyContent="space-between" gap="$8">
+            <StatusBadge
+              state={toDeviceState(sensorStatusDisplay.status)}
+              label={sensorStatusLabel(sensorStatusDisplay.status, sensorStatusDisplay.last_seen_formatted)}
+            />
+            <BatteryIndicator percent={sensorStatusDisplay.battery_pct} charging={sensorStatusDisplay.battery_charging} />
+          </XStack>
         ) : null}
       </YStack>
 
@@ -469,9 +475,10 @@ type ActionMessage = { tone: 'success' | 'info' | 'error'; text: string } | null
 function SensorActions({ deviceId, onRemoved }: { deviceId: string; onRemoved: () => void }) {
   const requestMeasureNow = useMutation(api.device_commands.requestMeasureNow)
   const requestSetWifi = useMutation(api.device_commands.requestSetWifi)
+  const requestFactoryReset = useMutation(api.device_commands.requestFactoryReset)
   const removeSensor = useMutation(api.device_commands.removeSensor)
   const command = useDeviceCommand()
-  const [activeAction, setActiveAction] = useState<'measure' | 'wifi' | 'remove' | null>(null)
+  const [activeAction, setActiveAction] = useState<'measure' | 'wifi' | 'reset' | 'remove' | null>(null)
   const [message, setMessage] = useState<ActionMessage>(null)
   const [isWifiFormOpen, setIsWifiFormOpen] = useState(false)
   const [wifiSsid, setWifiSsid] = useState('')
@@ -528,6 +535,43 @@ function SensorActions({ deviceId, onRemoved }: { deviceId: string; onRemoved: (
     } else {
       setMessage(null)
     }
+  }
+
+  // Werkseinstellungen: Sensor löscht WLAN-Daten und Token, das Backend löst ihn danach aus dem Konto
+  // (wie "Sensor entfernen"). Geht nur, wenn der Sensor den Auftrag abholen kann.
+  const handleFactoryReset = () => {
+    Alert.alert(
+      'Auf Werkseinstellungen zurücksetzen?',
+      'Dein Sensor vergisst sein WLAN und wird aus deinem Konto entfernt. Pflanzen, die ihm zugeordnet sind, werden gelöst. Danach kannst du ihn neu einrichten oder weitergeben.',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Zurücksetzen',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setActiveAction('reset')
+              setMessage({ tone: 'info', text: 'Auftrag wird an deinen Sensor geschickt …' })
+              const outcome = await command.run(() => requestFactoryReset({ device_id: deviceId }))
+              setActiveAction(null)
+
+              if (outcome.kind === 'ok') {
+                onRemoved()
+              } else if (outcome.kind === 'waiting') {
+                setMessage({
+                  tone: 'info',
+                  text: 'Der Auftrag liegt für deinen Sensor bereit. Läuft er am Akku, holt er ihn erst beim nächsten Messen ab, das kann bis zu einer Stunde dauern. Am USB geht es sofort. Danach verschwindet er aus deinem Konto.',
+                })
+              } else if (outcome.kind === 'failed' || outcome.kind === 'expired' || outcome.kind === 'error') {
+                setMessage({ tone: 'error', text: outcome.message })
+              } else {
+                setMessage(null)
+              }
+            })()
+          },
+        },
+      ],
+    )
   }
 
   const handleRemove = () => {
@@ -599,6 +643,10 @@ function SensorActions({ deviceId, onRemoved }: { deviceId: string; onRemoved: (
           {message.text}
         </Text>
       ) : null}
+
+      <Button variant="secondary" disabled={isBusy} onPress={handleFactoryReset}>
+        {activeAction === 'reset' ? 'Wird zurückgesetzt …' : 'Auf Werkseinstellungen zurücksetzen'}
+      </Button>
 
       <Button variant="danger" disabled={activeAction === 'remove'} onPress={handleRemove}>
         {activeAction === 'remove' ? 'Wird entfernt …' : 'Sensor entfernen'}

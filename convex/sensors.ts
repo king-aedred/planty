@@ -2,6 +2,7 @@ import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { releaseSensor } from "./device_commands";
+import { displayBatteryPercent } from "./battery";
 
 const sensorStatusValue = v.union(
   v.literal("active"),
@@ -75,8 +76,14 @@ export const getSensorStatus = query({
       };
     }
 
+    // Fremder oder gerade entfernter Sensor (reaktive Query nach "Sensor entfernen"):
+    // wie unbekannt behandeln statt zu werfen, sonst zeigt die App einen Fehler.
     if (sensor.clerk_id !== identity.subject) {
-      throw new Error("Unauthorized");
+      return {
+        status: "unknown" as const,
+        last_seen: null,
+        last_seen_formatted: "unbekannt",
+      };
     }
 
     if (typeof sensor.last_seen !== "number") {
@@ -87,11 +94,17 @@ export const getSensorStatus = query({
       };
     }
 
+    const battery = {
+      battery_pct: typeof sensor.battery_pct === "number" ? displayBatteryPercent(sensor.battery_pct) : null,
+      battery_charging: sensor.last_charging === true || sensor.last_usb === true,
+    };
+
     if (sensor.status === "needs_remeasurement") {
       return {
         status: "needs_remeasurement" as const,
         last_seen: sensor.last_seen,
         last_seen_formatted: formatUtcRelativeDate(sensor.last_seen),
+        ...battery,
       };
     }
 
@@ -102,6 +115,7 @@ export const getSensorStatus = query({
       status,
       last_seen: sensor.last_seen,
       last_seen_formatted: formatUtcRelativeDate(sensor.last_seen),
+      ...battery,
     };
   },
 });
@@ -156,6 +170,8 @@ export const getSensorsByClerkId = query({
 
     return sensors.map((sensor) => ({
       ...sensor,
+      battery_pct: typeof sensor.battery_pct === "number" ? displayBatteryPercent(sensor.battery_pct) : undefined,
+      battery_charging: sensor.last_charging === true || sensor.last_usb === true,
       has_plant: plants.some(
         (plant) => plant.device_id === sensor.device_id || plant.sensor_id === sensor.device_id,
       ),

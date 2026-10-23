@@ -39,6 +39,8 @@ export default defineSchema({
     // Aus POST /readings/batch (Firmware v7). next_contact_at in ms, Grundlage der späteren Offline-Erkennung.
     next_contact_at: v.optional(v.number()),
     last_battery_v: v.optional(v.number()),
+    // Geglätteter Akkustand 0-100 mit Nachkommastelle (convex/battery.ts), App zeigt gerundet.
+    battery_pct: v.optional(v.number()),
     // Aus der neuesten Batch-Messung: lädt das Gerät gerade bzw. hängt es am USB?
     last_charging: v.optional(v.boolean()),
     last_usb: v.optional(v.boolean()),

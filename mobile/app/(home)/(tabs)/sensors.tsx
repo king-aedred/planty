@@ -24,6 +24,13 @@ type SensorRow = {
   has_plant: boolean
   status?: string
   last_battery_v?: number
+  battery_pct?: number
+  battery_charging?: boolean
+}
+
+function batteryText(sensor: SensorRow): string {
+  if (sensor.battery_charging) return 'Akku lädt'
+  return typeof sensor.battery_pct === 'number' ? `Akku ${sensor.battery_pct} %` : ''
 }
 
 function deviceStateOf(sensor: SensorRow): DeviceState {
@@ -113,7 +120,7 @@ export default function SensorsScreen() {
                 key={sensor._id}
                 divider={index > 0}
                 title={sensor.device_id}
-                subtitle="Einer Pflanze zugeordnet"
+                subtitle={['Einer Pflanze zugeordnet', batteryText(sensor)].filter(Boolean).join(' · ')}
                 trailing={<StatusBadge state={deviceStateOf(sensor)} />}
               />
             ))}

@@ -7,6 +7,7 @@ import { authenticateDevice, DEVICE_ID_PATTERN, jsonResponse, sanitizeDeviceConf
 import { hasOpenCommands } from "./device_commands";
 import { findOtaOffer, parseSemver, recordOtaRollback } from "./firmware";
 import { applyBatchHealth } from "./sensor_alerts";
+import { nextBatteryPercent } from "./battery";
 
 // POST /readings/batch nach Vertrag Firmware v7 Abschnitt 5 und 10.
 // Statuscodes: 200 ok, 400 Struktur ungültig (Gerät verwirft die Messungen),
@@ -113,6 +114,16 @@ export const storeReadingsBatch = internalMutation({
         ...(args.fw_version ? { firmware_version: args.fw_version } : {}),
         ...(args.status?.next_contact_at !== undefined ? { next_contact_at: args.status.next_contact_at * 1000 } : {}),
         ...(newest.battery_v !== undefined ? { last_battery_v: newest.battery_v } : {}),
+        ...(typeof newest.battery_v === "number" && newest.battery_v > 1
+          ? {
+              battery_pct: nextBatteryPercent({
+                previous: sensor.battery_pct,
+                voltage: newest.battery_v,
+                charging: newest.charging === true || newest.usb === true,
+                previousCharging: sensor.last_charging === true || sensor.last_usb === true,
+              }),
+            }
+          : {}),
         ...(args.status ? { last_status: args.status } : {}),
         // Hinweise wieder scharf stellen, Sensorfehler intern markieren (convex/sensor_alerts.ts).
         ...applyBatchHealth(sensor, args.readings, now),
