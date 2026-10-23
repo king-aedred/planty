@@ -30,6 +30,9 @@ static const char *TAG = "cycle";
 #define BACKOFF_MAX_S        (4 * 3600)
 #define CRITICAL_SLEEP_S     (6 * 3600)
 #define FALLBACK_SLEEP_S     (30 * 60)
+// Ohne 32-kHz-Quarz wacht das Geraet oft etwas vor dem Slot auf (RC-Drift). Liegt der Slot
+// naeher als das, gilt er als erreicht: kein zweiter Kurzschlaf, kein ausgelassener WLAN-Versuch.
+#define SLOT_TOLERANCE_S     120
 #define SEND_ATTEMPTS        3
 #define READING_JSON_MAX     400
 #define RESP_MAX             2048
@@ -58,11 +61,21 @@ static uint64_t calc_seconds_until_next_slot(int hour, int minute, int second)
     return (uint64_t)((24 * 3600) - total_seconds);
 }
 
+static uint64_t seconds_until_next_slot_from(time_t t)
+{
+    struct tm lt;
+    localtime_r(&t, &lt);
+    return calc_seconds_until_next_slot(lt.tm_hour, lt.tm_min, lt.tm_sec);
+}
+
 static uint64_t sleep_until_next_slot(void)
 {
-    int h, m, s;
-    get_local_time_parts(&h, &m, &s);
-    uint64_t secs = calc_seconds_until_next_slot(h, m, s);
+    time_t now = time(NULL);
+    uint64_t secs = seconds_until_next_slot_from(now);
+    if (secs < SLOT_TOLERANCE_S) {
+        // Zu frueh aufgewacht, dieser Slot wurde gerade gemessen: bis zum uebernaechsten schlafen
+        secs += seconds_until_next_slot_from(now + (time_t)secs + 1) + 1;
+    }
     if (secs == 0 || secs > 24 * 3600) {
         ESP_LOGE(TAG, "Schlaf-Berechnung Problem! Fallback 30 Min");
         state_set_flag(FLAG_SLEEP_PROBLEM);
@@ -327,7 +340,7 @@ cycle_result_t cycle_run(const char *wake_cause, bool usb)
 
     // ---------- WLAN-Backoff (nur Akkubetrieb) ----------
     uint32_t now = now_unix();
-    if (!usb && p->next_wifi_at && now < p->next_wifi_at) {
+    if (!usb && p->next_wifi_at && now + SLOT_TOLERANCE_S < p->next_wifi_at) {
         ESP_LOGW(TAG, "WLAN-Backoff: naechster Versuch in %lu min, Messung gepuffert (%u im Puffer)",
                  (unsigned long)((p->next_wifi_at - now) / 60), p->buf_count);
         res.sleep_s = sleep_until_next_slot();
