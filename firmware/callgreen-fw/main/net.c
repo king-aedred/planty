@@ -51,6 +51,45 @@ static char s_ip[16] = "0.0.0.0";
 
 static void http_release(void);
 
+// set_wifi: Sicherung der bisherigen WLAN-Daten, solange neue Daten getestet werden.
+// Ueberlebt einen Stromverlust waehrend des Tests (siehe net_init).
+#define NVS_NAMESPACE  "callgreen"
+#define NVS_KEY_PREV   "wifi_prev"
+
+static void prev_save(const wifi_config_t *cfg)
+{
+    nvs_handle_t h;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &h) == ESP_OK) {
+        nvs_set_blob(h, NVS_KEY_PREV, &cfg->sta, sizeof(cfg->sta));
+        nvs_commit(h);
+        nvs_close(h);
+    }
+}
+
+static bool prev_load(wifi_config_t *cfg)
+{
+    nvs_handle_t h;
+    size_t len = sizeof(cfg->sta);
+    bool ok = false;
+    memset(cfg, 0, sizeof(*cfg));
+    if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &h) == ESP_OK) {
+        ok = nvs_get_blob(h, NVS_KEY_PREV, &cfg->sta, &len) == ESP_OK && len == sizeof(cfg->sta) &&
+             cfg->sta.ssid[0] != '\0';
+        nvs_close(h);
+    }
+    return ok;
+}
+
+static void prev_clear(void)
+{
+    nvs_handle_t h;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &h) == ESP_OK) {
+        nvs_erase_key(h, NVS_KEY_PREV);
+        nvs_commit(h);
+        nvs_close(h);
+    }
+}
+
 static void retry_timer_cb(void *arg)
 {
     if (s_want_connect && !s_connected) {
@@ -128,6 +167,15 @@ bool net_init(void)
     esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, on_event, NULL, NULL);
     esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, on_event, NULL, NULL);
     esp_wifi_set_mode(WIFI_MODE_STA);
+
+    // Strom waehrend eines set_wifi-Tests verloren: bisherige Daten wiederherstellen
+    wifi_config_t prev;
+    if (prev_load(&prev)) {
+        ESP_LOGW(TAG, "set_wifi wurde unterbrochen, stelle bisheriges WLAN wieder her");
+        esp_wifi_set_storage(WIFI_STORAGE_FLASH);
+        esp_wifi_set_config(WIFI_IF_STA, &prev);
+        prev_clear();
+    }
 
     s_inited = true;
     return true;
@@ -237,8 +285,14 @@ net_wifi_fail_t net_wifi_try(const wifi_config_t *cfg, uint32_t timeout_ms)
     // Bestehende HTTPS-Verbindung gehoert zum alten Netz
     http_release();
     sta_stop_connecting();
-    // Nur im RAM setzen, NVS behaelt die bisherigen Daten
-    esp_wifi_set_storage(WIFI_STORAGE_RAM);
+    // Neue Daten direkt ins NVS schreiben. Nur im RAM setzen und spaeter mit unveraenderten
+    // Daten erneut esp_wifi_set_config() aufrufen speichert nicht dauerhaft (auf Hardware
+    // beobachtet). Die bisherigen Daten sichern wir vorher fuer Fehlschlag und Stromverlust.
+    wifi_config_t cur;
+    if (esp_wifi_get_config(WIFI_IF_STA, &cur) == ESP_OK && cur.sta.ssid[0] != '\0') {
+        prev_save(&cur);
+    }
+    esp_wifi_set_storage(WIFI_STORAGE_FLASH);
     wifi_config_t c = *cfg;
     esp_err_t err = esp_wifi_set_config(WIFI_IF_STA, &c);
     if (err != ESP_OK) {
@@ -269,8 +323,9 @@ void net_wifi_restore(const wifi_config_t *cfg, uint32_t timeout_ms)
     esp_err_t err = esp_wifi_set_config(WIFI_IF_STA, &c);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Bisheriges WLAN setzen fehlgeschlagen: %s", esp_err_to_name(err));
-        return;
+        return;  // Sicherung bleibt, net_init stellt beim naechsten Start wieder her
     }
+    prev_clear();
     xEventGroupClearBits(s_events, BIT_GOT_IP);
     s_retry_delay_ms = 1000;
     s_want_connect = true;
@@ -280,11 +335,8 @@ void net_wifi_restore(const wifi_config_t *cfg, uint32_t timeout_ms)
 
 void net_wifi_commit(void)
 {
-    wifi_config_t cur;
-    esp_wifi_set_storage(WIFI_STORAGE_FLASH);
-    if (esp_wifi_get_config(WIFI_IF_STA, &cur) == ESP_OK) {
-        esp_wifi_set_config(WIFI_IF_STA, &cur);  // schreibt ins NVS
-    }
+    // Neue Daten stehen seit net_wifi_try() im NVS, Sicherung wird nicht mehr gebraucht
+    prev_clear();
 }
 
 void net_parallel_connect_stop(void)

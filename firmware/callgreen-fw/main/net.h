@@ -41,12 +41,13 @@ typedef enum {
     NET_WIFI_FAIL_TIMEOUT,    // keine IP innerhalb der Zeit
 } net_wifi_fail_t;
 
-// set_wifi: neue WLAN-Daten nur im RAM setzen und verbinden (NVS bleibt unveraendert).
+// set_wifi: neue WLAN-Daten setzen und verbinden. Die bisherigen Daten werden im NVS gesichert
+// und beim naechsten Start wiederhergestellt, falls der Test unterbrochen wird.
 // Danach entweder net_wifi_commit() oder net_wifi_restore() mit den alten Daten.
 net_wifi_fail_t net_wifi_try(const wifi_config_t *cfg, uint32_t timeout_ms);
 // set_wifi fehlgeschlagen: bisherige Daten setzen, ins NVS schreiben und verbinden
 void net_wifi_restore(const wifi_config_t *cfg, uint32_t timeout_ms);
-// Aktuelle WLAN-Daten ins NVS uebernehmen
+// set_wifi erfolgreich: neue Daten behalten, Sicherung verwerfen
 void net_wifi_commit(void);
 bool net_wifi_connected(void);
 const char *net_ip_str(void);
