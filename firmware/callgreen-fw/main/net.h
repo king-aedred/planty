@@ -42,8 +42,10 @@ typedef enum {
 } net_wifi_fail_t;
 
 // set_wifi: neue WLAN-Daten nur im RAM setzen und verbinden (NVS bleibt unveraendert).
-// Danach entweder net_wifi_commit() oder mit den alten Daten erneut net_wifi_try().
+// Danach entweder net_wifi_commit() oder net_wifi_restore() mit den alten Daten.
 net_wifi_fail_t net_wifi_try(const wifi_config_t *cfg, uint32_t timeout_ms);
+// set_wifi fehlgeschlagen: bisherige Daten setzen, ins NVS schreiben und verbinden
+void net_wifi_restore(const wifi_config_t *cfg, uint32_t timeout_ms);
 // Aktuelle WLAN-Daten ins NVS uebernehmen
 void net_wifi_commit(void);
 bool net_wifi_connected(void);

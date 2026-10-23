@@ -221,20 +221,30 @@ static net_wifi_fail_t map_reason(uint8_t reason)
     }
 }
 
+// Laufende Verbindung oder laufenden Verbindungsversuch abbrechen. Waehrend die STA
+// verbindet, lehnt esp_wifi_set_config() neue Daten ab ("sta is connecting").
+static void sta_stop_connecting(void)
+{
+    s_want_connect = false;
+    esp_timer_stop(s_retry_timer);
+    esp_wifi_disconnect();
+    wait_disconnected(3000);
+    vTaskDelay(pdMS_TO_TICKS(100));  // Treiber den Abbruch abschliessen lassen
+}
+
 net_wifi_fail_t net_wifi_try(const wifi_config_t *cfg, uint32_t timeout_ms)
 {
     // Bestehende HTTPS-Verbindung gehoert zum alten Netz
     http_release();
-    s_want_connect = false;
-    esp_timer_stop(s_retry_timer);
-    if (s_connected) {
-        esp_wifi_disconnect();
-        wait_disconnected(3000);
-    }
+    sta_stop_connecting();
     // Nur im RAM setzen, NVS behaelt die bisherigen Daten
     esp_wifi_set_storage(WIFI_STORAGE_RAM);
     wifi_config_t c = *cfg;
-    esp_wifi_set_config(WIFI_IF_STA, &c);
+    esp_err_t err = esp_wifi_set_config(WIFI_IF_STA, &c);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "WLAN-Daten setzen fehlgeschlagen: %s", esp_err_to_name(err));
+        return NET_WIFI_FAIL_TIMEOUT;
+    }
 
     s_last_reason = 0;
     xEventGroupClearBits(s_events, BIT_GOT_IP);
@@ -246,6 +256,26 @@ net_wifi_fail_t net_wifi_try(const wifi_config_t *cfg, uint32_t timeout_ms)
         return NET_WIFI_OK;
     }
     return map_reason(s_last_reason);
+}
+
+void net_wifi_restore(const wifi_config_t *cfg, uint32_t timeout_ms)
+{
+    http_release();
+    sta_stop_connecting();
+    // Bisherige Daten direkt setzen und ins NVS schreiben, nicht die aktuelle (fehlgeschlagene)
+    // Konfiguration uebernehmen
+    esp_wifi_set_storage(WIFI_STORAGE_FLASH);
+    wifi_config_t c = *cfg;
+    esp_err_t err = esp_wifi_set_config(WIFI_IF_STA, &c);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Bisheriges WLAN setzen fehlgeschlagen: %s", esp_err_to_name(err));
+        return;
+    }
+    xEventGroupClearBits(s_events, BIT_GOT_IP);
+    s_retry_delay_ms = 1000;
+    s_want_connect = true;
+    esp_wifi_connect();
+    xEventGroupWaitBits(s_events, BIT_GOT_IP, pdFALSE, pdTRUE, pdMS_TO_TICKS(timeout_ms));
 }
 
 void net_wifi_commit(void)

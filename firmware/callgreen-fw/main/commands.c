@@ -222,9 +222,8 @@ static void cmd_set_wifi(const char *id, const cJSON *params)
 
     ESP_LOGW(TAG, "set_wifi fehlgeschlagen (%s), stelle bisheriges WLAN wieder her", detail);
     if (old.sta.ssid[0]) {
-        net_wifi_try(&old, WIFI_TRY_TIMEOUT_MS);
+        net_wifi_restore(&old, WIFI_TRY_TIMEOUT_MS);
     }
-    net_wifi_commit();  // Speicher wieder auf NVS, schreibt die bisherigen Daten
     done_add(id, false, detail);
     if (net_wifi_connected()) {
         send_ack(id, false, detail);
