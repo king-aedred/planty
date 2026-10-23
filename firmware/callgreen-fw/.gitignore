@@ -79,3 +79,4 @@ Desktop.ini
 
 # Lokale Zugangsdaten
 sdkconfig.defaults.local
+build_rollback/
