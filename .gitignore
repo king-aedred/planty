@@ -75,3 +75,5 @@ firmware/*.bin
 # Agentic stuff
 PLANTY_HANDOFF.md 
 copilot_instructions.md
+# Claude Code, persoenliche Einstellungen
+.claude/settings.local.json

@@ -80,14 +80,19 @@ Aktuell auf dem Gerät: **7.0.10**. Akku-Schwellen entschieden: Firmware 3,4 / 3
 
 ### Als Nächstes
 1. **Settle-Test in Erde** (`CONFIG_CALLGREEN_SETTLE_TEST`, danach `settle_ms` per Config setzen; aktuell 2000).
-2. **Nachtdaten mit 7.0.10 prüfen**: keine Doppelmessungen, pünktliche Slots, `time_synced: true`.
-3. **UI-Runde** im Browser entlang des User-Flows:
+2. **UI-Runde** im Browser entlang des User-Flows:
    - „Planty“ → „Callgreen“ (Logo, „Finde deinen Planty-Sensor“, alte Texte)
    - Onboarding: deutlich zeigen, mit welchem WLAN der Sensor schon verbunden ist
    - Dashboard-Platzhalter ohne Funktion: Filter, Standort, „Gegossen“, „Jetzt gießen“
    - Akku-Anzeige und Knopf „Werkseinstellungen“ optisch prüfen
    - Start-Spinner mit Timeout (~15 s, „Keine Verbindung“ + „Erneut versuchen“)
    - Pflanzenliste im Web ohne Login aufrufbar
+
+### Firmware, klein (für eine 7.0.11)
+- **Zeitumstellung:** `cycle.c` berechnet die Schlafdauer als Differenz der Wanduhrzeit. Am 25.10. (CEST → CET) kam dadurch eine Messung um 03:58 in der Nachtpause; im Frühjahr fällt vermutlich die 5:00-Messung aus. Fix: Weckziel als lokale Zeit per `mktime` bestimmen.
+- **Mitternachtsmessung:** Für die Pause 20–24 Uhr schläft das Gerät bis 0:00, wacht auf und misst (seit 7.0.0, aus v4.3 übernommen). Falls die Pause durchgehend 20–5 Uhr sein soll: direkt bis 5:00 schlafen.
+
+Nachtdaten 23.–26.10. mit 7.0.10: keine Doppelmessungen, alle Slots pünktlich (Aufwachen 5–60 s vor dem Slot, Toleranz greift), Akku 4,19 → 4,17 V in 2,7 Tagen. Zwei WLAN-Aussetzer am Akku (25.10. 13:30, 26.10. 11:00, RSSI −65), beide korrekt gepuffert und nachgeliefert.
 
 ### Restliche Tests
 - Test 7: Netzwerkfehler (Internet in der FRITZ!Box sperren)
