@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons'
 import { type ComponentProps, useState } from 'react'
 import { Text, useTheme, XStack, YStack } from 'tamagui'
 import { Badge, type BadgeTone } from '../ui/badge'
+import { FadeIn } from '../ui/fade-in'
 import { TAB_BAR_SPACE } from '../ui/tab-bar'
 import { EmptyPotIllustration, type PlantMood, PlantAvatar, type PlantStatusTone } from './plant-avatar'
 
@@ -40,7 +41,13 @@ type PlantDashboardProps = {
   onOpenProfile: () => void
   // Versteckte Geste (5x auf die Wortmarke): Demo-Anruf.
   onWordmarkPress?: () => void
+  // Vorschau: Einblenden auch bei „Bewegung reduzieren“.
+  ignoreReducedMotion?: boolean
 }
+
+// Einstieg: Kopf, Titel, Umschalter, Pflanzen und Knöpfe blenden nacheinander von unten ein.
+const ENTRANCE_STEP_MS = 70
+const ENTRANCE_MAX_ROWS = 6
 
 type View = 'compact' | 'detailed'
 
@@ -48,55 +55,66 @@ export function PlantDashboard(props: PlantDashboardProps) {
   const { plants, activeSensors, totalSensors } = props
   const [view, setView] = useState<View>('compact')
   const isEmpty = plants !== undefined && plants.length === 0
+  const ignore = props.ignoreReducedMotion
+  const rowCount = Math.min(plants?.length ?? 0, ENTRANCE_MAX_ROWS)
+  const buttonsDelay = 260 + rowCount * ENTRANCE_STEP_MS
 
   return (
     <YStack gap="$16">
-      <DashboardHeader unreadCount={props.unreadCount} onOpenInbox={props.onOpenInbox} onOpenProfile={props.onOpenProfile} onWordmarkPress={props.onWordmarkPress} />
+      <FadeIn duration={500} offset={10} ignoreReducedMotion={ignore}>
+        <DashboardHeader unreadCount={props.unreadCount} onOpenInbox={props.onOpenInbox} onOpenProfile={props.onOpenProfile} onWordmarkPress={props.onWordmarkPress} />
+      </FadeIn>
 
-      <YStack gap="$12">
-        <XStack alignItems="flex-end" justifyContent="space-between" gap="$12">
-          <YStack flex={1} gap="$2">
-            <XStack alignItems="center" gap="$4">
-              <ThemedIcon name="leaf" size={14} color="secondary" />
-              <Text fontFamily="$body" fontWeight="700" fontSize={11} letterSpacing={0.8} textTransform="uppercase" color="$secondary">
-                Dashboard
-              </Text>
-            </XStack>
-            <Text fontFamily="$heading" fontSize={28} lineHeight="$5" letterSpacing={0.6} textTransform="uppercase" color="$textPrimary">
-              Meine Pflanzen
-            </Text>
-            {totalSensors > 0 ? (
-              <XStack alignItems="center" gap="$6" marginTop="$2">
-                <YStack width={8} height={8} borderRadius="$999" backgroundColor={activeSensors > 0 ? '$success' : '$outline'} />
-                <Text fontFamily="$body" fontSize={13} color="$textSecondary">
-                  {activeSensors} von {totalSensors} {totalSensors === 1 ? 'Sensor' : 'Sensoren'} aktiv
+      <FadeIn delay={90} duration={500} ignoreReducedMotion={ignore}>
+        <YStack gap="$12">
+          <XStack alignItems="flex-end" justifyContent="space-between" gap="$12">
+            <YStack flex={1} gap="$2">
+              <XStack alignItems="center" gap="$4">
+                <ThemedIcon name="leaf" size={14} color="secondary" />
+                <Text fontFamily="$body" fontWeight="700" fontSize={11} letterSpacing={0.8} textTransform="uppercase" color="$secondary">
+                  Dashboard
                 </Text>
               </XStack>
-            ) : null}
-          </YStack>
-          {/* TODO Platzhalter: Filter hat noch keine Funktion. */}
-          <RoundIconButton icon="options-outline" label="Filter" onPress={() => undefined} />
-        </XStack>
+              <Text fontFamily="$heading" fontSize={28} lineHeight="$5" letterSpacing={0.6} textTransform="uppercase" color="$textPrimary">
+                Meine Pflanzen
+              </Text>
+              {totalSensors > 0 ? (
+                <XStack alignItems="center" gap="$6" marginTop="$2">
+                  <YStack width={8} height={8} borderRadius="$999" backgroundColor={activeSensors > 0 ? '$success' : '$outline'} />
+                  <Text fontFamily="$body" fontSize={13} color="$textSecondary">
+                    {activeSensors} von {totalSensors} {totalSensors === 1 ? 'Sensor' : 'Sensoren'} aktiv
+                  </Text>
+                </XStack>
+              ) : null}
+            </YStack>
+            {/* TODO Platzhalter: Filter hat noch keine Funktion. */}
+            <RoundIconButton icon="options-outline" label="Filter" onPress={() => undefined} />
+          </XStack>
 
-        {!isEmpty ? <ViewSwitcher value={view} onChange={setView} /> : null}
-      </YStack>
+          {!isEmpty ? <ViewSwitcher value={view} onChange={setView} /> : null}
+        </YStack>
+      </FadeIn>
 
       {plants && plants.length > 0 ? (
         <YStack gap="$8">
-          {plants.map((plant) =>
-            view === 'compact' ? (
-              <CompactRow key={plant.id} plant={plant} onPress={() => props.onOpenPlant(plant.id)} />
-            ) : (
-              <DetailedCard key={plant.id} plant={plant} onPress={() => props.onOpenPlant(plant.id)} />
-            ),
-          )}
+          {plants.map((plant, index) => (
+            <FadeIn key={plant.id} delay={200 + Math.min(index, ENTRANCE_MAX_ROWS) * ENTRANCE_STEP_MS} duration={500} ignoreReducedMotion={ignore}>
+              {view === 'compact' ? (
+                <CompactRow plant={plant} onPress={() => props.onOpenPlant(plant.id)} />
+              ) : (
+                <DetailedCard plant={plant} onPress={() => props.onOpenPlant(plant.id)} />
+              )}
+            </FadeIn>
+          ))}
         </YStack>
       ) : null}
 
-      <YStack gap="$6">
-        <PillButton icon="add" label="Pflanze hinzufügen" variant="primary" onPress={props.onAddPlant} />
-        <PillButton icon="radio-outline" label="Sensor koppeln" variant="secondary" onPress={props.onPairSensor} />
-      </YStack>
+      <FadeIn delay={buttonsDelay} duration={500} ignoreReducedMotion={ignore}>
+        <YStack gap="$6">
+          <PillButton icon="add" label="Pflanze hinzufügen" variant="primary" onPress={props.onAddPlant} />
+          <PillButton icon="radio-outline" label="Sensor koppeln" variant="secondary" onPress={props.onPairSensor} />
+        </YStack>
+      </FadeIn>
 
       {isEmpty ? <EmptyTeaser /> : null}
 

@@ -75,6 +75,8 @@ export function TextField({
           onChangeText={onChangeText}
           placeholder={placeholder}
           secureTextEntry={hasToggle && !isRevealed}
+          // Web: Tamagui 3 verwirft secureTextEntry dort, verdeckt wird nur über type="password".
+          type={hasToggle && !isRevealed ? 'password' : undefined}
           disabled={!editable}
           autoCapitalize={autoCapitalize}
           autoComplete={autoComplete}

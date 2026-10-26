@@ -13,5 +13,5 @@ function IndexContent() {
     return null
   }
 
-  return <Redirect href={isSignedIn ? '/(home)' : '/(auth)/sign-in'} />
+  return <Redirect href={isSignedIn ? '/(home)' : '/(auth)/welcome'} />
 }

@@ -21,8 +21,10 @@ function AuthRoutesContent() {
 
   return (
     <Stack screenOptions={{ animation: 'slide_from_right', headerShown: false }}>
-      <Stack.Screen name="sign-in" />
-      <Stack.Screen name="sign-up" />
+      <Stack.Screen name="welcome" options={{ animation: 'fade' }} />
+      {/* Login und Registrieren ohne Stack-Animation: Den Übergang übernehmen Logo und Box (AuthShell). */}
+      <Stack.Screen name="sign-in" options={{ animation: 'none' }} />
+      <Stack.Screen name="sign-up" options={{ animation: 'none' }} />
     </Stack>
   )
 }

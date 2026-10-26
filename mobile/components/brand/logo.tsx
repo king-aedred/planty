@@ -41,7 +41,7 @@ export function Logo({ size = 32, variant = 'full' }: LogoProps) {
         letterSpacing={size * 0.06}
         textTransform="uppercase"
       >
-        Planty
+        Callgreen
       </Text>
     </XStack>
   )

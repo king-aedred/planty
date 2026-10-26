@@ -87,7 +87,7 @@ function HomeContent() {
   }
 
   if (!isSignedIn) {
-    return <Redirect href="/(auth)/sign-in" />
+    return <Redirect href="/(auth)/welcome" />
   }
 
   return <Redirect href="/(home)/(tabs)/plant-list" />

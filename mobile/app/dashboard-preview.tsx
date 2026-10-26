@@ -55,6 +55,7 @@ export default function DashboardPreviewScreen() {
             onPairSensor={noop}
             onOpenInbox={noop}
             onOpenProfile={noop}
+            ignoreReducedMotion
           />
         </ScrollView>
       </SafeAreaView>
