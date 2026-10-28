@@ -25,6 +25,7 @@ function AuthRoutesContent() {
       {/* Login und Registrieren ohne Stack-Animation: Den Übergang übernehmen Logo und Box (AuthShell). */}
       <Stack.Screen name="sign-in" options={{ animation: 'none' }} />
       <Stack.Screen name="sign-up" options={{ animation: 'none' }} />
+      <Stack.Screen name="forgot-password" options={{ animation: 'none' }} />
     </Stack>
   )
 }

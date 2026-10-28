@@ -263,6 +263,7 @@ export function SignInContent({ preview = false }: { preview?: boolean }) {
   )
 
   const signUpPath = preview ? '/preview/2-register' : '/(auth)/sign-up'
+  const forgotPasswordPath = preview ? '/preview/3-forgot-password' : '/(auth)/forgot-password'
 
   return (
     <AuthShell preview={preview}>
@@ -314,6 +315,18 @@ export function SignInContent({ preview = false }: { preview?: boolean }) {
               textContentType="password"
               editable={!isSubmitting}
             />
+
+            <XStack justifyContent="flex-end" marginTop="$-4">
+              <Text
+                fontFamily="$body"
+                fontSize={13}
+                color="$textSecondary"
+                onPress={() => helpers.leaveTo(`${forgotPasswordPath}?email=${encodeURIComponent(emailAddress.trim())}`)}
+                role="button"
+              >
+                Passwort vergessen?
+              </Text>
+            </XStack>
 
             {visibleErrors.length > 0 ? (
               <YStack gap="$4">

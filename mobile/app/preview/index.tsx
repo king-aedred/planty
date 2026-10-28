@@ -12,7 +12,7 @@ const SCREENS: { nr: number | string; title: string; href?: Href }[] = [
   { nr: 1, title: 'Login', href: '/preview/1-login' },
   { nr: 2, title: 'Registrieren', href: '/preview/2-register' },
   { nr: '2b', title: 'Code eingeben (Demo, Code 123456)', href: '/preview/2b-code' },
-  { nr: 3, title: 'Passwort vergessen' },
+  { nr: 3, title: 'Passwort vergessen', href: '/preview/3-forgot-password' },
   { nr: 4, title: 'Einstieg / erste Pflanze' },
   { nr: 5, title: 'Sensor koppeln (BLE)' },
   { nr: 6, title: 'Dashboard (Demodaten, alter Stand)', href: '/dashboard-preview' },
