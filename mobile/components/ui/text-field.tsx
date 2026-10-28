@@ -16,6 +16,8 @@ type TextFieldProps = {
   textContentType?: TextInputProps['textContentType']
   keyboardType?: TextInputProps['keyboardType']
   inputRef?: { current: { focus: () => void } | null }
+  // Unten angedockt: untere Ecken eckig, Akzentrahmen; für eine direkt anschließende Vorschlagsliste.
+  attached?: boolean
 }
 
 export function TextField({
@@ -31,13 +33,14 @@ export function TextField({
   textContentType,
   keyboardType,
   inputRef,
+  attached = false,
 }: TextFieldProps) {
   const theme = useTheme()
   const [isFocused, setIsFocused] = useState(false)
   const [isRevealed, setIsRevealed] = useState(false)
   const hasToggle = Boolean(secureTextEntry)
 
-  const borderColor = error ? '$critical' : isFocused ? '$accent' : '$border'
+  const borderColor = error ? '$critical' : isFocused || attached ? '$accent' : '$border'
 
   return (
     <YStack gap="$4">
@@ -48,6 +51,8 @@ export function TextField({
         alignItems="center"
         borderWidth={1}
         borderRadius="$12"
+        borderBottomLeftRadius={attached ? 0 : '$12'}
+        borderBottomRightRadius={attached ? 0 : '$12'}
         borderColor={borderColor}
         backgroundColor="$background"
         paddingHorizontal="$12"

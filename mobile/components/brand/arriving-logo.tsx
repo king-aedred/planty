@@ -13,6 +13,8 @@ type ArrivingLogoProps = {
   origin: LogoOrigin | null
   // Meldet die aktuelle Position, damit der Screen sie beim Verlassen weitergeben kann.
   onPosition?: (position: LogoPosition) => void
+  // Weich mitgleiten, wenn sich der eigene Platz ändert. Aus, wenn ein umgebender Kopf das übernimmt.
+  followLayout?: boolean
   ignoreReducedMotion?: boolean
 }
 
@@ -20,7 +22,7 @@ const GLIDE_MS = 520
 
 // Auth-Logo: gleitet vom vorherigen Screen an seinen Platz und weich mit, wenn sich sein Platz ändert
 // (z. B. weil die Box darunter höher wird). Bis zur ersten Messung unsichtbar, damit nichts aufblitzt.
-export function ArrivingLogo({ origin, onPosition, ignoreReducedMotion = false }: ArrivingLogoProps) {
+export function ArrivingLogo({ origin, onPosition, followLayout = true, ignoreReducedMotion = false }: ArrivingLogoProps) {
   const progress = useSharedValue(1)
   const visible = useSharedValue(0)
   const offsetY = useSharedValue(0)
@@ -51,10 +53,10 @@ export function ArrivingLogo({ origin, onPosition, ignoreReducedMotion = false }
       return
     }
 
-    if (Math.abs(y - lastY.current) > 0.5) {
+    if (followLayout && Math.abs(y - lastY.current) > 0.5) {
       glide(lastY.current - y, 1)
-      lastY.current = y
     }
+    lastY.current = y
   }
 
   const style = useAnimatedStyle(() => ({
