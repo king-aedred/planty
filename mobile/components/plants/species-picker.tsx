@@ -91,7 +91,7 @@ export function SpeciesPicker({ search, onSearchChange, results, selected, onSel
         </YStack>
       ) : null}
 
-      {selected || (manual && query) ? (
+      {(selected && selected.name !== selected.common_name) || (manual && query) ? (
         <XStack alignItems="center" gap="$6" marginTop="$6">
           <Ionicons name="checkmark-circle" size={16} color={theme.accentText?.val} />
           <Text fontFamily="$body" fontSize={13} color="$textSecondary">

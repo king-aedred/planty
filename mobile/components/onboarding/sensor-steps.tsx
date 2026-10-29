@@ -373,7 +373,7 @@ export function ConnectCard({ ssid, reached }: { ssid: string; reached: ConnectS
 }
 
 // A5: Kopplung fertig.
-export function PairedCard({ deviceName, ssid, onNext }: { deviceName: string; ssid: string; onNext: () => void }) {
+export function PairedCard({ deviceName, ssid, onNext, nextLabel = 'Weiter zur Pflanze' }: { deviceName: string; ssid: string; onNext: () => void; nextLabel?: string }) {
   const theme = useTheme()
   return (
     <Card>
@@ -389,7 +389,7 @@ export function PairedCard({ deviceName, ssid, onNext }: { deviceName: string; s
           im WLAN „{ssid}“
         </Text>
       </YStack>
-      <Button onPress={onNext}>Weiter zur Pflanze</Button>
+      <Button onPress={onNext}>{nextLabel}</Button>
     </Card>
   )
 }

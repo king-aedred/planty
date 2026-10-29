@@ -41,7 +41,8 @@ export function ListRow({ title, subtitle, leading, trailing, onPress, divider =
           </Text>
         ) : null}
       </YStack>
-      {trailing}
+      {/* Eigene Zeile, damit Pillen mit alignSelf (Badge) mittig sitzen. */}
+      {trailing ? <XStack alignItems="center">{trailing}</XStack> : null}
       {onPress ? <Ionicons name="chevron-forward" size={18} color={theme.textSecondary?.val} /> : null}
     </XStack>
   )

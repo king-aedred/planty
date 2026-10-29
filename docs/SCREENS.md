@@ -16,7 +16,8 @@ Stand: 2026-10-26 · Arbeitsliste für die UI-Runde. Gebaut wird in der Reihenfo
 ## Screens (Soll), in Bau-Reihenfolge
 
 Fertig (UI, 28.10.): 0 Willkommen, 1 Login, 2 Registrieren, 2b Code, 3 Passwort vergessen.
-Baseline 29.10.: Onboarding-UI (4) komplett inkl. Kanäle; Dashboard (6) als adaptives Layout (1 Pflanze = Bühne, wenige = Bühne + Liste, viele = Suche + „Braucht dich“/„Alles gut“), Gesamtbild mit Tab-Leiste, Nachrichten, Sensoren, Einstellungen unter `/preview/7-app` (Beispieldaten, noch nicht verdrahtet). Echte Clerk-Wege für Passwort vergessen und Code beim Login noch mit Testkonto prüfen.
+Baseline 29.10.: Onboarding-UI (4) komplett inkl. Kanäle; Dashboard (6) als adaptives Layout (1 Pflanze = Bühne, wenige = Bühne + Liste, viele = Suche + „Braucht dich“/„Alles gut“), Gesamtbild mit Tab-Leiste, Nachrichten, Sensoren, Einstellungen unter `/preview/7-app` (Beispieldaten, noch nicht verdrahtet).
+Detailseiten 29.10. (im Gesamtbild antippbar): Pflanzen-Detail, Pflanzen-Einstellungen, Sensor-Detail, Profil, Benachrichtigungen; Pflanze hinzufügen und Sensor koppeln als Modi des Onboarding-Ablaufs (`mode`). Bausteine in `components/screens/`. Echte Clerk-Wege für Passwort vergessen und Code beim Login noch mit Testkonto prüfen.
 
 | # | Screen | Inhalt | Änderung gegenüber heute |
 |---|---|---|---|

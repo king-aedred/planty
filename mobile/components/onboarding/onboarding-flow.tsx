@@ -1,8 +1,10 @@
 import { AuthShell, type AuthShellHelpers } from '@/components/auth/auth-shell'
+import { CharacterPicker, type PlantCharacter } from '@/components/plants/character-picker'
 import { PlantAvatar } from '@/components/plants/plant-avatar'
 import { type Species, SpeciesPicker } from '@/components/plants/species-picker'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { ChoiceCard } from '@/components/ui/choice-card'
 import { SectionLabel } from '@/components/ui/section-label'
 import { TextField } from '@/components/ui/text-field'
 import { Ionicons } from '@expo/vector-icons'
@@ -14,7 +16,6 @@ import { type ChannelAdapter } from './channel-setup'
 import { CallSetupCard, PushSetupCard, TelegramSetupCard } from './channel-steps'
 import { ConnectCard, MockQrCard, PairedCard, PlugInCard, ScanCard, WifiCard } from './sensor-steps'
 
-export type PlantCharacter = 'happy' | 'grumpy' | 'neutral'
 export type NotifyChannel = 'push' | 'telegram' | 'call'
 
 // Ergebnis des Onboardings; das Anlegen übernimmt der Aufrufer (echt: Convex, Vorschau: nichts).
@@ -34,6 +35,7 @@ type Step =
   | 'qr'
   | 'connect'
   | 'paired'
+  | 'assign'
   | 'plant'
   | 'character'
   | 'channels'
@@ -52,18 +54,19 @@ type OnboardingFlowProps = {
   pairing: PairingAdapter
   // Technik hinter der Kanal-Einrichtung (Vorschau: mockChannels).
   channelSetup: ChannelAdapter
+  // onboarding: erste Anmeldung (mit Kanälen). add-plant: Pflanze hinzufügen (Sensor optional).
+  // pair-sensor: Sensor koppeln und einer Pflanze zuordnen (bestehende ohne Sensor oder neue).
+  mode?: 'onboarding' | 'add-plant' | 'pair-sensor'
+  // Innerhalb der App: Abbrechen und Fertig rufen das auf, statt zu homePath zu navigieren.
+  onExit?: () => void
+  // pair-sensor: Pflanzen ohne Sensor, denen der neue Sensor zugeordnet werden kann.
+  freePlants?: { id: string; name: string }[]
   preview?: boolean
 }
 
-const CHARACTERS: { value: PlantCharacter; label: string; description: string; color: string; soft: string }[] = [
-  { value: 'happy', label: 'Fröhlich', description: 'Durch und durch optimistisch', color: '$characterHappy', soft: '$characterHappySoft' },
-  { value: 'grumpy', label: 'Grummelig', description: 'Nimmt kein Blatt vor den Mund', color: '$characterGrumpy', soft: '$characterGrumpySoft' },
-  { value: 'neutral', label: 'Gelassen', description: 'Alles, bloß kein Drama', color: '$characterNeutral', soft: '$characterNeutralSoft' },
-]
 
-// Reihenfolge der Schritte je Pfad, für die Fortschrittsleiste.
-const SENSOR_PATH: Step[] = ['plugin', 'scan', 'wifi', 'connect', 'paired', 'plant', 'character', 'channels']
-const PLANT_PATH: Step[] = ['plant', 'character', 'channels']
+// Schritte der Sensor-Kopplung, für Pfad und Fortschrittsleiste.
+const SENSOR_STEPS: Step[] = ['plugin', 'scan', 'wifi', 'connect', 'paired']
 // Einrichtung der gewählten Kanäle, in dieser Reihenfolge nach der Kanal-Auswahl.
 const CHANNEL_SETUP: { channel: NotifyChannel; step: Step }[] = [
   { channel: 'push', step: 'push-setup' },
@@ -80,10 +83,22 @@ const CONNECT_ERRORS: Record<ConnectFailure, string> = {
 
 // Onboarding nach der ersten Anmeldung (Plan in docs/SCREENS.md): Start → (Sensor) → Pflanze → Persönlichkeit
 // → Kanäle → fertig. Jeder Schritt tauscht nur die Box im gemeinsamen Auth-Rahmen.
-export function OnboardingFlow({ searchSpecies, homePath, onComplete, pairing, channelSetup, preview = false }: OnboardingFlowProps) {
+export function OnboardingFlow({
+  searchSpecies,
+  homePath,
+  onComplete,
+  pairing,
+  channelSetup,
+  mode = 'onboarding',
+  onExit,
+  freePlants = [],
+  preview = false,
+}: OnboardingFlowProps) {
   const shell = React.useRef<AuthShellHelpers | null>(null)
-  const [step, setStep] = React.useState<Step>('start')
-  const [withSensor, setWithSensor] = React.useState(false)
+  const [step, setStep] = React.useState<Step>(mode === 'pair-sensor' ? 'plugin' : 'start')
+  const [withSensor, setWithSensor] = React.useState(mode === 'pair-sensor')
+  // pair-sensor: bestehende Pflanze, der der Sensor zugeordnet wird (null = neue Pflanze anlegen).
+  const [assignedPlant, setAssignedPlant] = React.useState<{ id: string; name: string } | null>(null)
   const [speciesSearch, setSpeciesSearch] = React.useState('')
   const [species, setSpecies] = React.useState<Species | null>(null)
   const [isManual, setIsManual] = React.useState(false)
@@ -143,16 +158,25 @@ export function OnboardingFlow({ searchSpecies, homePath, onComplete, pairing, c
   }, [networks, pairing, step])
 
   const setupSteps = CHANNEL_SETUP.filter((entry) => channels.includes(entry.channel)).map((entry) => entry.step)
-  const path: Step[] = [...(withSensor ? SENSOR_PATH : PLANT_PATH), ...setupSteps, 'ready']
-  // Nächster bzw. vorheriger Schritt ab der Kanal-Auswahl (Einrichtungen, dann fertig).
+  const plantSteps: Step[] = mode === 'pair-sensor' ? ['assign', ...(assignedPlant ? [] : (['plant', 'character'] as Step[]))] : ['plant', 'character']
+  const path: Step[] = [
+    ...(withSensor ? SENSOR_STEPS : []),
+    ...plantSteps,
+    ...(mode === 'onboarding' ? (['channels', ...setupSteps] as Step[]) : []),
+    'ready',
+  ]
+  // Nächster bzw. vorheriger Schritt im aktuellen Pfad; vor dem ersten Schritt liegt der Start (bzw. Abbrechen).
   const stepAfter = (current: Step): Step => path[path.indexOf(current) + 1] ?? 'ready'
-  const stepBefore = (current: Step): Step => path[path.indexOf(current) - 1] ?? 'channels'
+  const stepBefore = (current: Step): Step | null => {
+    const index = path.indexOf(current)
+    return index > 0 ? path[index - 1] : mode === 'pair-sensor' ? null : 'start'
+  }
   // Der QR-Scan zählt als Teil des WLAN-Schritts.
   const progressStep = step === 'qr' ? 'wifi' : step
   const progress = step === 'start' ? 0 : (path.indexOf(progressStep) + 1) / path.length
   const speciesName = species?.common_name ?? manualSpecies.trim()
   // Leer gelassener Name: die Pflanze heißt wie ihre Art.
-  const plantName = nickname.trim() || speciesName || 'Deine Pflanze'
+  const plantName = assignedPlant?.name ?? (nickname.trim() || speciesName || 'Deine Pflanze')
 
   const goTo = (next: Step) => {
     if (shell.current) {
@@ -205,14 +229,24 @@ export function OnboardingFlow({ searchSpecies, homePath, onComplete, pairing, c
     setChannels((current) => (current.includes(channel) ? current.filter((entry) => entry !== channel) : [...current, channel]))
   }
 
-  const complete = () => {
-    onComplete?.({ withSensor, species, name: plantName, character: character ?? 'neutral', channels })
-    shell.current?.finish(homePath)
+  // Ablauf verlassen: in der App zurück (onExit), sonst ins Dashboard.
+  const leave = () => {
+    if (onExit) {
+      shell.current?.exit(onExit)
+    } else {
+      shell.current?.finish(homePath)
+    }
   }
 
-  const backLink = (target: Step) => (
-    <Text fontFamily="$body" fontSize={14} color="$textSecondary" onPress={() => goTo(target)} role="button">
-      Zurück
+  const complete = () => {
+    onComplete?.({ withSensor, species, name: plantName, character: character ?? 'neutral', channels })
+    leave()
+  }
+
+  // Zurück zum vorherigen Schritt; ohne vorherigen Schritt (Ablauf in der App) heißt es „Abbrechen“.
+  const backLink = (target: Step | null) => (
+    <Text fontFamily="$body" fontSize={14} color="$textSecondary" onPress={() => (target ? goTo(target) : leave())} role="button">
+      {target ? 'Zurück' : 'Abbrechen'}
     </Text>
   )
 
@@ -222,7 +256,7 @@ export function OnboardingFlow({ searchSpecies, homePath, onComplete, pairing, c
         shell.current = helpers
 
         if (step === 'plugin') {
-          return <PlugInCard onNext={startScan} back={backLink('start')} />
+          return <PlugInCard onNext={startScan} back={backLink(stepBefore('plugin'))} />
         }
 
         if (step === 'scan') {
@@ -283,7 +317,38 @@ export function OnboardingFlow({ searchSpecies, homePath, onComplete, pairing, c
         }
 
         if (step === 'paired') {
-          return <PairedCard deviceName={device?.deviceName ?? 'Dein Sensor'} ssid={ssid ?? ''} onNext={() => goTo('plant')} />
+          return (
+            <PairedCard
+              deviceName={device?.deviceName ?? 'Dein Sensor'}
+              ssid={ssid ?? ''}
+              nextLabel={mode === 'pair-sensor' ? 'Weiter' : 'Weiter zur Pflanze'}
+              onNext={() => goTo(stepAfter('paired'))}
+            />
+          )
+        }
+
+        if (step === 'assign') {
+          return (
+            <Card>
+              <SectionLabel>Zuordnen</SectionLabel>
+              <Text fontFamily="$heading" color="$textPrimary" fontSize="$8" marginTop="$4" marginBottom="$4">
+                Zu welcher Pflanze gehört er?
+              </Text>
+              <YStack gap="$8">
+                {freePlants.map((plant) => (
+                  <ChoiceCard
+                    key={plant.id}
+                    title={plant.name}
+                    description="Hat noch keinen Sensor"
+                    selected={assignedPlant?.id === plant.id}
+                    onPress={() => setAssignedPlant(plant)}
+                  />
+                ))}
+                <ChoiceCard title="Neue Pflanze anlegen" description="Art, Name und Persönlichkeit" selected={assignedPlant === null} onPress={() => setAssignedPlant(null)} />
+              </YStack>
+              <Button onPress={() => goTo(assignedPlant ? 'ready' : 'plant')}>Weiter</Button>
+            </Card>
+          )
         }
 
         if (step === 'plant') {
@@ -324,7 +389,7 @@ export function OnboardingFlow({ searchSpecies, homePath, onComplete, pairing, c
               <Button onPress={() => goTo('character')} disabled={!canContinue}>
                 Weiter
               </Button>
-              <XStack>{backLink(withSensor ? 'paired' : 'start')}</XStack>
+              <XStack>{backLink(stepBefore('plant'))}</XStack>
             </Card>
           )
         }
@@ -336,37 +401,8 @@ export function OnboardingFlow({ searchSpecies, homePath, onComplete, pairing, c
               <Text fontFamily="$heading" color="$textPrimary" fontSize="$8" marginTop="$4" marginBottom="$4">
                 Wie tickt {plantName}?
               </Text>
-              <XStack gap="$8">
-                {CHARACTERS.map((option) => {
-                  const isActive = character === option.value
-                  return (
-                    <YStack
-                      key={option.value}
-                      role="radio"
-                      aria-checked={isActive}
-                      flex={1}
-                      onPress={() => setCharacter(option.value)}
-                      alignItems="center"
-                      gap="$6"
-                      paddingVertical="$16"
-                      paddingHorizontal="$4"
-                      borderRadius="$16"
-                      borderWidth={1}
-                      borderColor={isActive ? option.color : '$border'}
-                      backgroundColor={isActive ? option.soft : '$surface press:$surfaceElevated'}
-                    >
-                      <PlantAvatar mood={option.value} status="success" size={52} />
-                      <Text fontFamily="$body" fontWeight="700" fontSize={14} color={isActive ? option.color : '$textPrimary'}>
-                        {option.label}
-                      </Text>
-                      <Text fontFamily="$body" fontSize={11} color="$textSecondary" textAlign="center">
-                        {option.description}
-                      </Text>
-                    </YStack>
-                  )
-                })}
-              </XStack>
-              <Button onPress={() => goTo('channels')} disabled={!character}>
+              <CharacterPicker value={character} onChange={setCharacter} />
+              <Button onPress={() => goTo(stepAfter('character'))} disabled={!character}>
                 Weiter
               </Button>
               <XStack>{backLink('plant')}</XStack>
@@ -433,7 +469,7 @@ export function OnboardingFlow({ searchSpecies, homePath, onComplete, pairing, c
               <YStack alignItems="center" gap="$12" paddingVertical="$8">
                 <PlantAvatar mood={character ?? 'neutral'} status="success" size={88} />
                 <Text fontFamily="$heading" color="$textPrimary" fontSize="$8" textAlign="center">
-                  {plantName} ist bereit!
+                  {assignedPlant ? `${plantName} hat jetzt einen Sensor!` : `${plantName} ist bereit!`}
                 </Text>
                 <Text fontFamily="$body" color="$textSecondary" fontSize={15} lineHeight="$5" textAlign="center">
                   {withSensor
@@ -441,8 +477,39 @@ export function OnboardingFlow({ searchSpecies, homePath, onComplete, pairing, c
                     : 'Ohne Sensor gibt es noch keine Messwerte. Du kannst jederzeit einen koppeln.'}
                 </Text>
               </YStack>
-              <Button onPress={complete}>Los geht&apos;s</Button>
+              <Button onPress={complete}>{mode === 'onboarding' ? 'Los geht\'s' : 'Fertig'}</Button>
               <XStack>{backLink(stepBefore('ready'))}</XStack>
+            </Card>
+          )
+        }
+
+        if (mode === 'add-plant') {
+          return (
+            <Card>
+              <SectionLabel>Neue Pflanze</SectionLabel>
+              <Text fontFamily="$heading" color="$textPrimary" fontSize="$8" marginTop="$4" marginBottom="$4">
+                Bekommt sie einen Sensor?
+              </Text>
+              <Button
+                onPress={() => {
+                  setWithSensor(true)
+                  goTo('plugin')
+                }}
+              >
+                Ja, Sensor koppeln
+              </Button>
+              <Button
+                variant="secondary"
+                onPress={() => {
+                  setWithSensor(false)
+                  goTo('plant')
+                }}
+              >
+                Nein, ohne Sensor
+              </Button>
+              <Button variant="ghost" onPress={leave}>
+                Abbrechen
+              </Button>
             </Card>
           )
         }

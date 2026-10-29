@@ -10,10 +10,12 @@ type FadeInProps = {
   offset?: number
   // Systemeinstellung „Bewegung reduzieren“ übergehen (nur für Vorschau-Seiten).
   ignoreReducedMotion?: boolean
+  // Den verfügbaren Platz ausfüllen (ganze Seiten statt Abschnitte).
+  fill?: boolean
 }
 
 // Einblenden beim Erscheinen: Deckkraft 0 → 1, leicht von unten. Bei „Bewegung reduzieren“ sofort sichtbar.
-export function FadeIn({ children, delay = 0, duration = 450, offset = 16, ignoreReducedMotion = false }: FadeInProps) {
+export function FadeIn({ children, delay = 0, duration = 450, offset = 16, ignoreReducedMotion = false, fill = false }: FadeInProps) {
   const systemReducedMotion = useReducedMotion()
   const reducedMotion = systemReducedMotion && !ignoreReducedMotion
   const progress = useSharedValue(reducedMotion ? 1 : 0)
@@ -32,5 +34,5 @@ export function FadeIn({ children, delay = 0, duration = 450, offset = 16, ignor
     transform: [{ translateY: (1 - progress.value) * offset }],
   }))
 
-  return <Animated.View style={style}>{children}</Animated.View>
+  return <Animated.View style={[fill ? { flex: 1 } : null, style]}>{children}</Animated.View>
 }

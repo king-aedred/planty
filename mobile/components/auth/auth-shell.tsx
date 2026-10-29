@@ -15,6 +15,8 @@ export type AuthShellHelpers = {
   swap: (change: () => void) => void
   // Fertig angemeldet: Logo und Box zoomen leicht auf und blenden aus, dann in die App.
   finish: (path: string) => void
+  // Wie finish, aber statt zu navigieren läuft danach then (Abläufe innerhalb der App, z. B. Pflanze hinzufügen).
+  exit: (then: () => void) => void
 }
 
 type AuthShellProps = {
@@ -98,6 +100,18 @@ export function AuthShell({ children, preview = false, progress, smoothLayout = 
     exit.value = withTiming(1, { duration: FINISH_MS, easing: Easing.in(Easing.cubic), reduceMotion }, (finished) => {
       if (finished) {
         runOnJS(goHome)(path)
+      }
+    })
+  }
+
+  const exitThen = (then: () => void) => {
+    if (isLeaving.current) {
+      return
+    }
+    isLeaving.current = true
+    exit.value = withTiming(1, { duration: FINISH_MS, easing: Easing.in(Easing.cubic), reduceMotion }, (finished) => {
+      if (finished) {
+        runOnJS(then)()
       }
     })
   }
@@ -206,7 +220,7 @@ export function AuthShell({ children, preview = false, progress, smoothLayout = 
                   >
                     <Animated.View style={outStyle}>
                     <FadeIn delay={boxDelay} duration={origin ? 500 : 450} offset={origin ? 20 : 16} ignoreReducedMotion={preview}>
-                      {children({ leaveTo, swap, finish })}
+                      {children({ leaveTo, swap, finish, exit: exitThen })}
                     </FadeIn>
                   </Animated.View>
                   </Animated.View>
@@ -232,7 +246,7 @@ export function AuthShell({ children, preview = false, progress, smoothLayout = 
                   </>
                   <Animated.View style={outStyle}>
                     <FadeIn delay={boxDelay} duration={origin ? 500 : 450} offset={origin ? 20 : 16} ignoreReducedMotion={preview}>
-                      {children({ leaveTo, swap, finish })}
+                      {children({ leaveTo, swap, finish, exit: exitThen })}
                     </FadeIn>
                   </Animated.View>
                 </YStack>
