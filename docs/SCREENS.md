@@ -15,7 +15,8 @@ Stand: 2026-10-26 · Arbeitsliste für die UI-Runde. Gebaut wird in der Reihenfo
 
 ## Screens (Soll), in Bau-Reihenfolge
 
-Fertig (UI, 28.10.): 0 Willkommen, 1 Login, 2 Registrieren, 2b Code, 3 Passwort vergessen. Echte Clerk-Wege für Passwort vergessen und Code beim Login noch mit Testkonto prüfen.
+Fertig (UI, 28.10.): 0 Willkommen, 1 Login, 2 Registrieren, 2b Code, 3 Passwort vergessen.
+Baseline 29.10.: Onboarding-UI (4) komplett inkl. Kanäle; Dashboard (6) als adaptives Layout (1 Pflanze = Bühne, wenige = Bühne + Liste, viele = Suche + „Braucht dich“/„Alles gut“), Gesamtbild mit Tab-Leiste, Nachrichten, Sensoren, Einstellungen unter `/preview/7-app` (Beispieldaten, noch nicht verdrahtet). Echte Clerk-Wege für Passwort vergessen und Code beim Login noch mit Testkonto prüfen.
 
 | # | Screen | Inhalt | Änderung gegenüber heute |
 |---|---|---|---|
@@ -40,6 +41,24 @@ Fertig (UI, 28.10.): 0 Willkommen, 1 Login, 2 Registrieren, 2b Code, 3 Passwort 
 Nebenher: Start-Spinner mit Timeout (~15 s, „Keine Verbindung“ + „Erneut versuchen“), Login-Pflicht für alle Routen im Web, restliche „Planty“-Texte.
 
 Unverändert / außerhalb der Runde: Fake-Anruf (`demo-call`), Dev Tools, Vorschau-Seiten.
+
+## Onboarding (Plan 28.10.)
+
+Kommt einmalig nach der ersten Anmeldung (Feld `onboarding_done` am Nutzer; bestehende Konten mit Pflanzen gelten als fertig). Optik wie Auth: Kopf bleibt, jeder Schritt tauscht nur die Box, oben Fortschritt.
+
+```
+O1  „Schön, dass du da bist!“  [Ich habe einen Sensor] [Nur eine Pflanze anlegen] [Später → leeres Dashboard]
+Sensor-Pfad:  A1 USB anstecken → A2 Suchen → A3 WLAN + Passwort → A4 Verbinden … → A5 „Sensor verbunden!“
+Beide Pfade:  P1 Art suchen/selbst eingeben + Name (frei; leer = Standardname der Art)
+              P2 Persönlichkeit (Fröhlich / Grummelig / Gelassen)
+              P3 „Wie darf <Name> sich bei dir melden?“ Push · Telegram · Anruf (kommt bald)
+                 → je gewähltem Kanal dessen Einrichtung (Push-Erlaubnis, Telegram-Code)
+              P4 „<Name> ist bereit!“ → Übergang ins Dashboard (ohne Sensor: Hinweis, dass Messwerte fehlen)
+```
+
+Bausteine einmal bauen und wiederverwenden: A1–A5 = Screen 5 (Sensor koppeln), P1–P2 = Screen 9 (Pflanze hinzufügen). Vorschau mit simuliertem BLE/WLAN/Telegram.
+
+Bau-Etappen: 1) Rahmen + O1 + P1–P4 (Pflanzen-Pfad) · 2) A1–A5 (Sensor-Pfad, BLE-Logik aus `ble-provisioning.tsx`) · 3) Kanäle (Push, Telegram) · 4) echte Weiche nach dem Login + `onboarding_done` im Backend.
 
 ## Später
 
