@@ -22,6 +22,8 @@ type PlantDetailProps = {
   messages: DemoMessage[]
   history: (metric: HistoryMetric, range: HistoryRange) => number[]
   moistureTarget: number
+  // Hinweis unter der Temperatur, z. B. „15–28 °C“.
+  temperatureRange?: string
   onBack: () => void
   onOpenSettings: () => void
   onOpenSensor: () => void
@@ -77,6 +79,7 @@ export function PlantDetailScreen({
   messages,
   history,
   moistureTarget,
+  temperatureRange = '15–28 °C',
   onBack,
   onOpenSettings,
   onOpenSensor,
@@ -151,7 +154,7 @@ export function PlantDetailScreen({
                 icon="thermometer"
                 label="Temperatur"
                 value={hasData && summary?.temperature_median !== undefined ? `${summary.temperature_median}°` : '–'}
-                hint="15–28 °C"
+                hint={temperatureRange}
                 tone={hasData ? toneOf(summary?.temperature_state) : 'neutral'}
               />
               <MetricTile

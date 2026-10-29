@@ -82,12 +82,23 @@ function HomeContent() {
     void createUser({ clerk_id: clerkId, email })
   }, [clerkId, createUser, email, existingUser, isLoaded, isSignedIn])
 
-  if (!isLoaded || plants === undefined) {
+  if (!isLoaded) {
     return <LoadingScreen />
   }
 
   if (!isSignedIn) {
     return <Redirect href="/(auth)/welcome" />
+  }
+
+  // Nutzer wird beim ersten Mal noch angelegt (createUser oben); bis dahin warten.
+  if (plants === undefined || existingUser === undefined || existingUser === null) {
+    return <LoadingScreen />
+  }
+
+  // Erste Anmeldung: Onboarding, solange es nicht erledigt ist und noch keine Pflanze existiert
+  // (ältere Konten ohne Feld onboarding_done, aber mit Pflanzen, gelten als fertig).
+  if (!existingUser.onboarding_done && plants.length === 0) {
+    return <Redirect href="/(home)/onboarding" />
   }
 
   return <Redirect href="/(home)/(tabs)/plant-list" />

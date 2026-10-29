@@ -10,6 +10,10 @@ export default function Layout() {
       <Stack.Screen name="add-sensor" />
       <Stack.Screen name="plant-settings" />
       <Stack.Screen name="status" options={{ gestureEnabled: false }} />
+      <Stack.Screen name="sensor" />
+      <Stack.Screen name="assign-sensor" />
+      <Stack.Screen name="profile" />
+      <Stack.Screen name="notifications" />
       <Stack.Screen name="devmode" />
     </Stack>
   )

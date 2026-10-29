@@ -16,14 +16,29 @@ type ProfileProps = {
   name: string
   email: string
   phone: string
+  // E-Mail ändern braucht einen eigenen Bestätigungsweg; bis dahin nur anzeigen.
+  emailEditable?: boolean
   onBack: () => void
-  onSave: () => void
-  onDeleteAccount: () => void
+  // Speichern; gibt eine Fehlermeldung zurück, wenn es nicht geklappt hat.
+  onSave: (values: { name: string; email: string; phone: string }) => Promise<string | null> | void
+  onChangePassword?: (current: string, next: string) => Promise<string | null>
+  // Fehlt: „Konto löschen“ wird nicht angeboten.
+  onDeleteAccount?: () => void
   ignoreReducedMotion?: boolean
 }
 
 // Profil (Konto): Name, E-Mail, Telefonnummer, Passwort ändern, Konto löschen.
-export function ProfileScreen({ name: initialName, email: initialEmail, phone: initialPhone, onBack, onSave, onDeleteAccount, ignoreReducedMotion }: ProfileProps) {
+export function ProfileScreen({
+  name: initialName,
+  email: initialEmail,
+  phone: initialPhone,
+  emailEditable = true,
+  onBack,
+  onSave,
+  onChangePassword,
+  onDeleteAccount,
+  ignoreReducedMotion,
+}: ProfileProps) {
   const theme = useTheme()
   const [name, setName] = useState(initialName)
   const [email, setEmail] = useState(initialEmail)
@@ -32,7 +47,35 @@ export function ProfileScreen({ name: initialName, email: initialEmail, phone: i
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [notice, setNotice] = useState('')
-  const isDirty = name !== initialName || email !== initialEmail || phone !== initialPhone
+  const [error, setError] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
+  const [saved, setSaved] = useState({ name: initialName, email: initialEmail, phone: initialPhone })
+  const isDirty = name !== saved.name || email !== saved.email || phone !== saved.phone
+
+  const save = async () => {
+    setError('')
+    setIsSaving(true)
+    const failure = await onSave({ name: name.trim(), email: email.trim(), phone: phone.trim() })
+    setIsSaving(false)
+    if (failure) {
+      setError(failure)
+      return
+    }
+    setSaved({ name, email, phone })
+    setNotice('Gespeichert')
+  }
+
+  const changePassword = async () => {
+    setPasswordError('')
+    const failure = onChangePassword ? await onChangePassword(currentPassword, newPassword) : null
+    if (failure) {
+      setPasswordError(failure)
+      return
+    }
+    setSheet(null)
+    setNotice('Passwort geändert')
+  }
 
   return (
     <YStack flex={1} backgroundColor="$background">
@@ -58,7 +101,7 @@ export function ProfileScreen({ name: initialName, email: initialEmail, phone: i
           <FadeIn delay={80} duration={400} ignoreReducedMotion={ignoreReducedMotion}>
             <Card>
               <TextField label="Name" value={name} onChangeText={setName} autoCapitalize="words" />
-              <TextField label="E-Mail-Adresse" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
+              <TextField label="E-Mail-Adresse" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" editable={emailEditable} />
               {email !== initialEmail ? (
                 <Text fontFamily="$body" fontSize={12} color="$textSecondary">
                   Die neue Adresse bestätigst du mit einem Code, den wir dir schicken.
@@ -85,21 +128,22 @@ export function ProfileScreen({ name: initialName, email: initialEmail, phone: i
             </YStack>
           </FadeIn>
 
-          <FadeIn delay={200} duration={400} ignoreReducedMotion={ignoreReducedMotion}>
-            <Button variant="danger" onPress={() => setSheet('delete')}>
-              Konto löschen
-            </Button>
-          </FadeIn>
+          {onDeleteAccount ? (
+            <FadeIn delay={200} duration={400} ignoreReducedMotion={ignoreReducedMotion}>
+              <Button variant="danger" onPress={() => setSheet('delete')}>
+                Konto löschen
+              </Button>
+            </FadeIn>
+          ) : null}
         </ScrollView>
 
-        <YStack position="absolute" left={16} right={16} bottom={24}>
-          <Button
-            onPress={() => {
-              setNotice('Gespeichert')
-              onSave()
-            }}
-            disabled={!isDirty || !name.trim()}
-          >
+        <YStack position="absolute" left={16} right={16} bottom={24} gap="$6">
+          {error ? (
+            <Text fontFamily="$body" fontSize={12} color="$critical" textAlign="center">
+              {error}
+            </Text>
+          ) : null}
+          <Button onPress={() => void save()} disabled={!isDirty || !name.trim()} loading={isSaving}>
             Speichern
           </Button>
         </YStack>
@@ -113,13 +157,12 @@ export function ProfileScreen({ name: initialName, email: initialEmail, phone: i
             </Text>
             <TextField label="Aktuelles Passwort" value={currentPassword} onChangeText={setCurrentPassword} secureTextEntry />
             <TextField label="Neues Passwort" value={newPassword} onChangeText={setNewPassword} secureTextEntry />
-            <Button
-              onPress={() => {
-                setSheet(null)
-                setNotice('Passwort geändert')
-              }}
-              disabled={!currentPassword || newPassword.length < 8}
-            >
+            {passwordError ? (
+              <Text fontFamily="$body" fontSize={12} color="$critical">
+                {passwordError}
+              </Text>
+            ) : null}
+            <Button onPress={() => void changePassword()} disabled={!currentPassword || newPassword.length < 8}>
               Passwort speichern
             </Button>
           </>
@@ -135,7 +178,7 @@ export function ProfileScreen({ name: initialName, email: initialEmail, phone: i
               variant="danger"
               onPress={() => {
                 setSheet(null)
-                onDeleteAccount()
+                onDeleteAccount?.()
               }}
             >
               Konto endgültig löschen

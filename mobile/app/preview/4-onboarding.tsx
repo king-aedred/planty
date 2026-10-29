@@ -6,5 +6,5 @@ import { searchDemoSpecies } from '@/components/screens/demo-data'
 
 // Vorschau Screen 4 (docs/SCREENS.md): Onboarding, simuliert. Sensor-Kopplung simuliert (WLAN-Passwort 12345678).
 export default function OnboardingPreview() {
-  return <OnboardingFlow preview searchSpecies={searchDemoSpecies} homePath={MOCK_HOME} pairing={mockPairing} channelSetup={mockChannels} />
+  return <OnboardingFlow preview useSpeciesSearch={searchDemoSpecies} homePath={MOCK_HOME} pairing={mockPairing} channelSetup={mockChannels} />
 }

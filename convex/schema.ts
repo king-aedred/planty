@@ -24,6 +24,9 @@ export default defineSchema({
     telegram_chat_id: v.optional(v.string()),
     telegram_connect_code: v.optional(v.string()),
     expo_push_token: v.optional(v.string()),
+    // Onboarding nach der ersten Anmeldung abgeschlossen (oder übersprungen). Fehlt bei älteren Konten:
+    // die App wertet dann vorhandene Pflanzen als „fertig“.
+    onboarding_done: v.optional(v.boolean()),
     created_at: v.number(),
   }).index("by_clerk_id", ["clerk_id"]),
 

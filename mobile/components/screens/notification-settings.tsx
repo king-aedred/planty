@@ -11,10 +11,25 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { Text, useTheme, XStack, YStack } from 'tamagui'
 import { DetailHeader } from './detail-header'
 
+export type NotificationSettingsValues = {
+  push: boolean
+  call: boolean
+  maxPerDay: number
+  // Zeitraum, in dem sich die Pflanzen melden dürfen (volle Stunden).
+  windowFrom: number
+  windowTo: number
+}
+
 type NotificationSettingsProps = {
+  initial: NotificationSettingsValues
   telegramConnected: boolean
   onBack: () => void
   onConnectTelegram: () => void
+  onDisconnectTelegram?: () => void
+  // Jede Änderung (echt: in den Nutzer-Einstellungen speichern).
+  onChange?: (values: NotificationSettingsValues) => void
+  // „Worüber“ gibt es im Backend noch nicht; nur in der Vorschau zeigen.
+  showTopics?: boolean
   ignoreReducedMotion?: boolean
 }
 
@@ -43,13 +58,25 @@ function SettingRow({ icon, title, subtitle, control, divider }: { icon: Compone
 const pad = (hour: number) => `${String(hour).padStart(2, '0')}:00`
 
 // Benachrichtigungen (Einstellungen): Kanäle, worüber, wie oft, Ruhezeiten.
-export function NotificationSettingsScreen({ telegramConnected, onBack, onConnectTelegram, ignoreReducedMotion }: NotificationSettingsProps) {
-  const [push, setPush] = useState(true)
-  const [call, setCall] = useState(false)
+export function NotificationSettingsScreen({
+  initial,
+  telegramConnected,
+  onBack,
+  onConnectTelegram,
+  onDisconnectTelegram,
+  onChange,
+  showTopics = true,
+  ignoreReducedMotion,
+}: NotificationSettingsProps) {
+  const [values, setValues] = useState(initial)
   const [topics, setTopics] = useState({ water: true, temperature: true, light: false, sensor: true })
-  const [maxPerDay, setMaxPerDay] = useState(3)
-  const [quietFrom, setQuietFrom] = useState(21)
-  const [quietTo, setQuietTo] = useState(8)
+  const update = <K extends keyof NotificationSettingsValues>(key: K) => (value: NotificationSettingsValues[K]) => {
+    setValues((current) => {
+      const next = { ...current, [key]: value }
+      onChange?.(next)
+      return next
+    })
+  }
   const toggleTopic = (key: keyof typeof topics) => (value: boolean) => setTopics((current) => ({ ...current, [key]: value }))
 
   return (
@@ -62,7 +89,7 @@ export function NotificationSettingsScreen({ telegramConnected, onBack, onConnec
             <YStack gap="$8">
               <SectionLabel>Wie</SectionLabel>
               <Card dense>
-                <SettingRow icon="notifications-outline" title="Push" subtitle="Mitteilung aufs Handy" control={<Switch value={push} onChange={setPush} label="Push" />} />
+                <SettingRow icon="notifications-outline" title="Push" subtitle="Mitteilung aufs Handy" control={<Switch value={values.push} onChange={update('push')} label="Push" />} />
                 <SettingRow
                   divider
                   icon="paper-plane-outline"
@@ -70,9 +97,15 @@ export function NotificationSettingsScreen({ telegramConnected, onBack, onConnec
                   subtitle={telegramConnected ? 'Nachricht im Telegram-Chat' : 'Nicht verbunden'}
                   control={
                     telegramConnected ? (
-                      <XStack>
-                        <Badge tone="success" label="Verbunden" />
-                      </XStack>
+                      onDisconnectTelegram ? (
+                        <Text fontFamily="$body" fontWeight="700" fontSize={13} color="$textSecondary" onPress={onDisconnectTelegram} role="button">
+                          Trennen
+                        </Text>
+                      ) : (
+                        <XStack>
+                          <Badge tone="success" label="Verbunden" />
+                        </XStack>
+                      )
                     ) : (
                       <Text fontFamily="$body" fontWeight="700" fontSize={13} color="$accentText" onPress={onConnectTelegram} role="button">
                         Verbinden
@@ -80,11 +113,12 @@ export function NotificationSettingsScreen({ telegramConnected, onBack, onConnec
                     )
                   }
                 />
-                <SettingRow divider icon="call-outline" title="Anruf" subtitle="Nur wenn es wirklich dringend ist" control={<Switch value={call} onChange={setCall} label="Anruf" />} />
+                <SettingRow divider icon="call-outline" title="Anruf" subtitle="Nur wenn es wirklich dringend ist" control={<Switch value={values.call} onChange={update('call')} label="Anruf" />} />
               </Card>
             </YStack>
           </FadeIn>
 
+          {showTopics ? (
           <FadeIn delay={70} duration={400} ignoreReducedMotion={ignoreReducedMotion}>
             <YStack gap="$8">
               <SectionLabel>Worüber</SectionLabel>
@@ -96,6 +130,7 @@ export function NotificationSettingsScreen({ telegramConnected, onBack, onConnec
               </Card>
             </YStack>
           </FadeIn>
+          ) : null}
 
           <FadeIn delay={140} duration={400} ignoreReducedMotion={ignoreReducedMotion}>
             <YStack gap="$8">
@@ -106,33 +141,33 @@ export function NotificationSettingsScreen({ telegramConnected, onBack, onConnec
                     Höchstens pro Pflanze und Tag
                   </Text>
                   <Text fontFamily="$body" fontSize={13} color="$textSecondary">
-                    {maxPerDay}
+                    {values.maxPerDay}
                   </Text>
                 </XStack>
-                <Stepper value={maxPerDay} min={1} max={10} onChange={setMaxPerDay} />
+                <Stepper value={values.maxPerDay} min={1} max={10} onChange={update('maxPerDay')} />
               </Card>
             </YStack>
           </FadeIn>
 
           <FadeIn delay={210} duration={400} ignoreReducedMotion={ignoreReducedMotion}>
             <YStack gap="$8">
-              <SectionLabel>Ruhezeiten</SectionLabel>
+              <SectionLabel>Erreichbar</SectionLabel>
               <Card>
                 <Text fontFamily="$body" fontSize={13} color="$textSecondary">
-                  Von {pad(quietFrom)} bis {pad(quietTo)} Uhr bleibt es still. Dringendes kommt danach.
+                  Von {pad(values.windowFrom)} bis {pad(values.windowTo)} Uhr dürfen sich deine Pflanzen melden. Außerhalb bleibt es still.
                 </Text>
                 <XStack gap="$12">
                   <YStack flex={1} gap="$6">
                     <Text fontFamily="$body" fontWeight="600" fontSize={13} color="$textPrimary">
                       Von
                     </Text>
-                    <Stepper value={quietFrom} min={0} max={23} onChange={setQuietFrom} />
+                    <Stepper value={values.windowFrom} min={0} max={23} onChange={update('windowFrom')} />
                   </YStack>
                   <YStack flex={1} gap="$6">
                     <Text fontFamily="$body" fontWeight="600" fontSize={13} color="$textPrimary">
                       Bis
                     </Text>
-                    <Stepper value={quietTo} min={0} max={23} onChange={setQuietTo} />
+                    <Stepper value={values.windowTo} min={0} max={23} onChange={update('windowTo')} />
                   </YStack>
                 </XStack>
               </Card>

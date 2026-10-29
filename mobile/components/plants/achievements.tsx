@@ -6,12 +6,11 @@ type IconName = ComponentProps<typeof Ionicons>['name']
 
 export type Badge = { id: string; icon: IconName; label: string; earned: boolean }
 
+export type AchievementStat = { icon: IconName; color: string; value: string; label: string }
+
 type AchievementsProps = {
-  plantName: string
-  // Tage am Stück im grünen Bereich.
-  happyDays: number
-  // Wie oft in Folge gegossen, nachdem die Pflanze sich gemeldet hat.
-  wateringStreak: number
+  // Zwei große Kennzahlen, z. B. Tage im grünen Bereich.
+  stats: AchievementStat[]
   badges: Badge[]
 }
 
@@ -33,9 +32,9 @@ function StatTile({ icon, color, value, label }: { icon: IconName; color: string
   )
 }
 
-// Kleine Erfolge einer Pflanze (Gamification): Glücks-Serie, Gieß-Serie und Abzeichen; noch nicht erreichte
-// Abzeichen sind ausgegraut.
-export function Achievements({ plantName, happyDays, wateringStreak, badges }: AchievementsProps) {
+// Kleine Erfolge einer Pflanze (Gamification): Kennzahlen und Abzeichen; noch nicht erreichte Abzeichen
+// sind ausgegraut.
+export function Achievements({ stats, badges }: AchievementsProps) {
   const theme = useTheme()
   const earned = badges.filter((badge) => badge.earned).length
 
@@ -51,8 +50,9 @@ export function Achievements({ plantName, happyDays, wateringStreak, badges }: A
       </XStack>
 
       <XStack gap="$8">
-        <StatTile icon="leaf" color="$success" value={`${happyDays}`} label={`Tage ist ${plantName} schon glücklich`} />
-        <StatTile icon="water" color="$accentText" value={`${wateringStreak}×`} label="in Folge rechtzeitig gegossen" />
+        {stats.map((stat) => (
+          <StatTile key={stat.label} {...stat} />
+        ))}
       </XStack>
 
       <XStack gap="$8" flexWrap="wrap">

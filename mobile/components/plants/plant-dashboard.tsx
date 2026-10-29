@@ -21,6 +21,8 @@ export type DashboardPlant = {
   quote?: string | null
   // Pflanze ohne gekoppelten Sensor: keine Messwerte, eigener Zustand mit „Sensor koppeln“.
   hasSensor?: boolean
+  // Kleine Zeile unten auf der Bühne (adaptives Dashboard), z. B. „Nächste Messung 14:00 · Akku 82 %“.
+  detail?: string
   summary: {
     moisture_median: number
     temperature_median?: number

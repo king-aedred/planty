@@ -1,4 +1,4 @@
-import { httpAction, internalMutation } from "./_generated/server";
+import { httpAction, internalMutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
@@ -350,4 +350,40 @@ export const readingsBatchHttp = httpAction(async (ctx, request) => {
     console.error("[readings/batch] store failed", { device_id, error: String(error) });
     return jsonResponse(500, { error: "internal_error" });
   }
+});
+
+// Messwerte eines eigenen Sensors seit einem Zeitpunkt (Unix-Sekunden), für den Verlauf im Pflanzen-Detail.
+// Nur die Felder, die die App braucht; höchstens 1000 Messungen (30 Tage × ~22 Messungen passen).
+export const getReadingsSince = query({
+  args: {
+    device_id: v.string(),
+    since: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+
+    const sensor = await ctx.db
+      .query("sensors")
+      .withIndex("by_device_id", (q) => q.eq("device_id", args.device_id))
+      .first();
+
+    if (!sensor || sensor.clerk_id !== identity.subject) {
+      return [];
+    }
+
+    const readings = await ctx.db
+      .query("device_readings")
+      .withIndex("by_device_and_measured_at", (q) => q.eq("device_id", args.device_id).gte("measured_at", args.since))
+      .take(1000);
+
+    return readings.map((reading) => ({
+      measured_at: reading.measured_at,
+      moisture_pct: reading.moisture_sensor_error ? null : reading.moisture_pct,
+      temperature_c: reading.temperature_c ?? null,
+      lux: reading.lux ?? null,
+    }));
+  },
 });

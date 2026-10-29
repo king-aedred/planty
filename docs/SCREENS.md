@@ -19,6 +19,8 @@ Fertig (UI, 28.10.): 0 Willkommen, 1 Login, 2 Registrieren, 2b Code, 3 Passwort 
 Baseline 29.10.: Onboarding-UI (4) komplett inkl. Kanäle; Dashboard (6) als adaptives Layout (1 Pflanze = Bühne, wenige = Bühne + Liste, viele = Suche + „Braucht dich“/„Alles gut“), Gesamtbild mit Tab-Leiste, Nachrichten, Sensoren, Einstellungen unter `/preview/7-app` (Beispieldaten, noch nicht verdrahtet).
 Detailseiten 29.10. (im Gesamtbild antippbar): Pflanzen-Detail, Pflanzen-Einstellungen, Sensor-Detail, Profil, Benachrichtigungen; Pflanze hinzufügen und Sensor koppeln als Modi des Onboarding-Ablaufs (`mode`). Bausteine in `components/screens/`. Echte Clerk-Wege für Passwort vergessen und Code beim Login noch mit Testkonto prüfen.
 
+**Phase A (31.10.): echte App verdrahtet.** Tabs (Dashboard adaptiv, Nachrichten, Sensoren, Einstellungen) mit Markenleiste, Pflanzen-Detail mit Verlauf aus `device_readings`, Pflanzen-Einstellungen, Sensor-Detail mit Befehlen, Profil (Clerk), Benachrichtigungen (Kanäle, Erreichbarkeit, Max/Tag), Onboarding nach der ersten Anmeldung (`users.onboarding_done`), Pflanze hinzufügen, Sensor koppeln/zuordnen, Erfolge aus den Tagesauswertungen. Push-Erlaubnis nur noch im Onboarding bzw. beim Einschalten. Offen für Phase B (Testtag mit Handy + Sensor): neue BLE-Schritte statt des bestehenden Kopplungs-Bausteins, Push/Telegram am Gerät prüfen, Befehle am echten Sensor.
+
 | # | Screen | Inhalt | Änderung gegenüber heute |
 |---|---|---|---|
 | 0 | **Willkommen (App-Start)** | Logo-Animation (Mitte → oben), „Hast du schon ein Konto?“ → Registrieren / Anmelden | **neu**; Start ohne Login landet hier statt im Login |

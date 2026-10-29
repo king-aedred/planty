@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as battery from "../battery.js";
 import type * as crons from "../crons.js";
 import type * as device_commands from "../device_commands.js";
 import type * as device_readings from "../device_readings.js";
@@ -31,6 +32,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  battery: typeof battery;
   crons: typeof crons;
   device_commands: typeof device_commands;
   device_readings: typeof device_readings;

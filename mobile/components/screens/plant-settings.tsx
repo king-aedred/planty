@@ -16,18 +16,29 @@ import { Text, useTheme, XStack, YStack } from 'tamagui'
 import type { DemoSensor } from './demo-data'
 import { DetailHeader } from './detail-header'
 
-type Thresholds = { moisture: number; temperatureMin: number; temperatureMax: number; lightMin: number; lightMax: number }
+export type Thresholds = { moisture: number; temperatureMin: number; temperatureMax: number; lightMin: number; lightMax: number }
+
+export type PlantSettingsValues = {
+  name: string
+  // Neu gewählte Art; null = unverändert bzw. eigene Art.
+  species: Species | null
+  speciesChanged: boolean
+  character: PlantCharacter
+  thresholds: Thresholds
+}
 
 type PlantSettingsProps = {
   plant: DashboardPlant
   sensor: DemoSensor | null
   thresholds: Thresholds
-  searchSpecies: (search: string) => Species[]
+  // Hook: wird bei jedem Rendern mit dem aktuellen Suchtext aufgerufen.
+  useSpeciesSearch: (search: string) => Species[]
   onBack: () => void
-  onSave: () => void
-  onDelete: () => void
+  // Speichern; gibt eine Fehlermeldung zurück, wenn es nicht geklappt hat.
+  onSave: (values: PlantSettingsValues) => Promise<string | null> | void
+  onDelete: () => Promise<void> | void
   onPairSensor: () => void
-  onRemoveSensor: () => void
+  onRemoveSensor: () => Promise<void> | void
   ignoreReducedMotion?: boolean
 }
 
@@ -52,7 +63,7 @@ export function PlantSettingsScreen({
   plant,
   sensor,
   thresholds: initialThresholds,
-  searchSpecies,
+  useSpeciesSearch,
   onBack,
   onSave,
   onDelete,
@@ -69,6 +80,22 @@ export function PlantSettingsScreen({
   const [thresholds, setThresholds] = useState(initialThresholds)
   const [isDirty, setIsDirty] = useState(false)
   const [sheet, setSheet] = useState<'delete' | 'remove-sensor' | null>(null)
+  const [speciesChanged, setSpeciesChanged] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const speciesMatches = useSpeciesSearch(speciesSearch)
+
+  const save = async () => {
+    setSaveError('')
+    setIsSaving(true)
+    const error = await onSave({ name: name.trim(), species, speciesChanged, character, thresholds })
+    setIsSaving(false)
+    if (error) {
+      setSaveError(error)
+      return
+    }
+    setIsDirty(false)
+  }
 
   const change = <T,>(setter: (value: T) => void) => (value: T) => {
     setter(value)
@@ -99,12 +126,14 @@ export function PlantSettingsScreen({
                   setSpeciesSearch(value)
                   setSpecies(null)
                   setIsManual(false)
+                  setSpeciesChanged(true)
                   setIsDirty(true)
                 }}
-                results={species ? [] : searchSpecies(speciesSearch)}
+                results={species ? [] : speciesMatches}
                 selected={species}
                 onSelect={(selected) => {
                   setSpecies(selected)
+                  setSpeciesChanged(true)
                   setIsDirty(true)
                 }}
                 onManualEntry={() => {
@@ -190,14 +219,13 @@ export function PlantSettingsScreen({
           )}
         </ScrollView>
 
-        <YStack position="absolute" left={16} right={16} bottom={24}>
-          <Button
-            onPress={() => {
-              setIsDirty(false)
-              onSave()
-            }}
-            disabled={!isDirty || !name.trim()}
-          >
+        <YStack position="absolute" left={16} right={16} bottom={24} gap="$6">
+          {saveError ? (
+            <Text fontFamily="$body" fontSize={12} color="$critical" textAlign="center">
+              {saveError}
+            </Text>
+          ) : null}
+          <Button onPress={() => void save()} disabled={!isDirty || !name.trim()} loading={isSaving}>
             Speichern
           </Button>
         </YStack>
@@ -216,7 +244,7 @@ export function PlantSettingsScreen({
               variant="danger"
               onPress={() => {
                 setSheet(null)
-                onDelete()
+                void onDelete()
               }}
             >
               Endgültig löschen
@@ -237,7 +265,7 @@ export function PlantSettingsScreen({
               variant="danger"
               onPress={() => {
                 setSheet(null)
-                onRemoveSensor()
+                void onRemoveSensor()
               }}
             >
               Sensor lösen

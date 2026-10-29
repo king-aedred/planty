@@ -20,9 +20,12 @@ type SensorDetailProps = {
   onBack: () => void
   onOpenPlant?: () => void
   onAssignPlant: () => void
+  // Sensor wurde entfernt bzw. zurückgesetzt: Seite schließen.
   onRemoved: () => void
-  // Befehle an den Sensor (Vorschau: simuliert). Auflösung = Sensor hat bestätigt.
-  runCommand: (command: 'measure' | 'wifi' | 'reset') => Promise<void>
+  // Sensor aus dem Konto lösen (echt: Convex removeSensor).
+  onRemove: () => Promise<void> | void
+  // Befehle an den Sensor (Vorschau: simuliert). ok = Sensor hat bestätigt, waiting = holt ihn später ab.
+  runCommand: (command: SensorCommand, params?: { ssid: string; password: string }) => Promise<CommandResult>
   ignoreReducedMotion?: boolean
 }
 
@@ -60,10 +63,13 @@ function InfoRow({ icon, label, value, divider }: { icon: ReactNode; label: stri
   )
 }
 
-type ActionState = { command: 'measure' | 'wifi' | 'reset'; phase: 'running' | 'done' } | null
+export type SensorCommand = 'measure' | 'wifi' | 'reset'
+export type CommandResult = { kind: 'ok' } | { kind: 'waiting' } | { kind: 'failed'; message: string }
+
+type ActionState = { command: SensorCommand; phase: 'running' | 'done' | 'waiting' | 'failed'; message?: string } | null
 
 // Sensor-Detail (Screen 10): Zustand, zugeordnete Pflanze, Befehle (messen, WLAN, Werkseinstellungen) und Entfernen.
-export function SensorDetailScreen({ sensor, onBack, onOpenPlant, onAssignPlant, onRemoved, runCommand, ignoreReducedMotion }: SensorDetailProps) {
+export function SensorDetailScreen({ sensor, onBack, onOpenPlant, onAssignPlant, onRemoved, onRemove, runCommand, ignoreReducedMotion }: SensorDetailProps) {
   const theme = useTheme()
   const [sheet, setSheet] = useState<'wifi' | 'reset' | 'remove' | null>(null)
   const [action, setAction] = useState<ActionState>(null)
@@ -81,10 +87,19 @@ export function SensorDetailScreen({ sensor, onBack, onOpenPlant, onAssignPlant,
     return () => clearTimeout(timer)
   }, [action])
 
-  const run = async (command: 'measure' | 'wifi' | 'reset') => {
+  const run = async (command: SensorCommand) => {
     setSheet(null)
     setAction({ command, phase: 'running' })
-    await runCommand(command)
+    const result = await runCommand(command, command === 'wifi' ? { ssid: ssid.trim(), password } : undefined)
+    setPassword('')
+    if (result.kind === 'failed') {
+      setAction({ command, phase: 'failed', message: result.message })
+      return
+    }
+    if (result.kind === 'waiting') {
+      setAction({ command, phase: 'waiting' })
+      return
+    }
     if (command === 'reset') {
       onRemoved()
       return
@@ -92,12 +107,16 @@ export function SensorDetailScreen({ sensor, onBack, onOpenPlant, onAssignPlant,
     setAction({ command, phase: 'done' })
   }
 
+  const RUNNING: Record<SensorCommand, string> = { measure: 'Sensor misst …', wifi: 'Sensor wechselt das WLAN …', reset: 'Sensor wird zurückgesetzt …' }
+  const DONE: Record<SensorCommand, string> = { measure: 'Neue Messung ist da', wifi: `Verbunden mit „${ssid}“`, reset: 'Zurückgesetzt' }
   const actionText = action
-    ? {
-        measure: action.phase === 'running' ? 'Sensor misst …' : 'Neue Messung ist da',
-        wifi: action.phase === 'running' ? 'Sensor wechselt das WLAN …' : `Verbunden mit „${ssid}“`,
-        reset: 'Sensor wird zurückgesetzt …',
-      }[action.command]
+    ? action.phase === 'running'
+      ? RUNNING[action.command]
+      : action.phase === 'done'
+        ? DONE[action.command]
+        : action.phase === 'waiting'
+          ? 'Auftrag liegt bereit. Der Sensor holt ihn bei der nächsten Messung ab.'
+          : action.message ?? 'Das hat leider nicht geklappt.'
     : null
 
   return (
@@ -122,13 +141,24 @@ export function SensorDetailScreen({ sensor, onBack, onOpenPlant, onAssignPlant,
 
           {actionText ? (
             <FadeIn duration={250} offset={6} ignoreReducedMotion={ignoreReducedMotion}>
-              <XStack alignItems="center" justifyContent="center" gap="$8" padding="$12" borderRadius="$12" backgroundColor={action?.phase === 'done' ? '$successSoft' : '$accentSoft'}>
+              <XStack
+                alignItems="center"
+                justifyContent="center"
+                gap="$8"
+                padding="$12"
+                borderRadius="$12"
+                backgroundColor={action?.phase === 'done' ? '$successSoft' : action?.phase === 'failed' ? '$criticalSoft' : '$accentSoft'}
+              >
                 {action?.phase === 'done' ? (
                   <Ionicons name="checkmark-circle" size={18} color={theme.success?.val} />
+                ) : action?.phase === 'failed' ? (
+                  <Ionicons name="alert-circle" size={18} color={theme.critical?.val} />
+                ) : action?.phase === 'waiting' ? (
+                  <Ionicons name="time-outline" size={18} color={theme.accentText?.val} />
                 ) : (
                   <ActivityIndicator size="small" color={theme.accentText?.val} />
                 )}
-                <Text fontFamily="$body" fontWeight="600" fontSize={14} color="$textPrimary">
+                <Text flexShrink={1} fontFamily="$body" fontWeight="600" fontSize={14} color="$textPrimary">
                   {actionText}
                 </Text>
               </XStack>
@@ -157,7 +187,7 @@ export function SensorDetailScreen({ sensor, onBack, onOpenPlant, onAssignPlant,
                   divider
                   icon={<MaterialCommunityIcons name={`wifi-strength-${level}` as 'wifi-strength-1'} size={18} color={theme.textSecondary?.val} />}
                   label="WLAN"
-                  value={sensor.ssid}
+                  value={sensor.ssid || ['', 'Schwach', 'Mittel', 'Gut', 'Sehr gut'][level]}
                 />
                 <InfoRow divider icon={icon('time-outline')} label="Zuletzt gemeldet" value={sensor.lastSeen} />
                 <InfoRow divider icon={icon('calendar-outline')} label="Nächste Messung" value={`${sensor.nextMeasurement} Uhr`} />
@@ -237,7 +267,7 @@ export function SensorDetailScreen({ sensor, onBack, onOpenPlant, onAssignPlant,
               variant="danger"
               onPress={() => {
                 setSheet(null)
-                onRemoved()
+                void Promise.resolve(onRemove()).then(onRemoved)
               }}
             >
               Entfernen

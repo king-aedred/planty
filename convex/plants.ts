@@ -137,6 +137,7 @@ export const createPlant = mutation({
     device_id: v.optional(v.string()),
     species_id: v.optional(v.string()),
     name: v.string(),
+    character: v.optional(v.union(v.literal("happy"), v.literal("grumpy"), v.literal("neutral"))),
   },
   handler: async (ctx: MutationCtx, args) => {
     await requireSelf(ctx, args.clerk_id);
@@ -177,6 +178,7 @@ export const createPlant = mutation({
       clerk_id: args.clerk_id,
       species_id: args.species_id,
       name: args.name,
+      ...(args.character ? { character: args.character } : {}),
       created_at: Date.now(),
       ...(species
         ? {
@@ -307,6 +309,8 @@ export const updatePlantSettings = mutation({
     plant_id: v.id("plants"),
     settings: v.object({
       name: v.string(),
+      // Neue Art (optional); ohne Feld bleibt die Art unverändert.
+      species_id: v.optional(v.string()),
       moisture_threshold: v.optional(v.number()),
       temperature_threshold_min: v.optional(v.number()),
       temperature_threshold_max: v.optional(v.number()),
@@ -325,6 +329,7 @@ export const updatePlantSettings = mutation({
 
     await ctx.db.patch(args.plant_id, {
       name: args.settings.name,
+      ...(args.settings.species_id !== undefined ? { species_id: args.settings.species_id } : {}),
       moisture_threshold: args.settings.moisture_threshold,
       temperature_threshold_min: args.settings.temperature_threshold_min,
       temperature_threshold_max: args.settings.temperature_threshold_max,
@@ -375,6 +380,45 @@ export const removeSensorFromPlant = mutation({
       device_id: undefined,
       sensor_id: undefined,
     });
+
+    return args.plant_id;
+  },
+});
+
+// Freien Sensor des Nutzers einer seiner Pflanzen (ohne Sensor) zuordnen.
+export const assignSensorToPlant = mutation({
+  args: {
+    plant_id: v.id("plants"),
+    device_id: v.string(),
+  },
+  handler: async (ctx: MutationCtx, args) => {
+    const plant = await ctx.db.get(args.plant_id);
+
+    if (!plant) {
+      throw new Error("Plant not found");
+    }
+
+    await requireSelf(ctx, plant.clerk_id ?? "");
+
+    const sensor = await ctx.db
+      .query("sensors")
+      .withIndex("by_device_id", (q) => q.eq("device_id", args.device_id))
+      .first();
+
+    if (!sensor || sensor.clerk_id !== plant.clerk_id) {
+      throw new Error("Sensor not owned by user");
+    }
+
+    const plants = (await ctx.db.query("plants").collect()) as Doc<"plants">[];
+    const occupied = plants.find(
+      (entry) => entry._id !== plant._id && (entry.device_id === args.device_id || entry.sensor_id === args.device_id),
+    );
+
+    if (occupied) {
+      throw new Error("Sensor already registered");
+    }
+
+    await ctx.db.patch(args.plant_id, { device_id: args.device_id, sensor_id: args.device_id });
 
     return args.plant_id;
   },

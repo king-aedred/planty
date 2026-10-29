@@ -137,7 +137,8 @@ function PushTokenRegistration() {
 
     const registerPushToken = async () => {
       try {
-        const permissionResult = await Notifications.requestPermissionsAsync()
+        // Erfragt wird die Erlaubnis im Onboarding bzw. in den Einstellungen; hier nur das Token auffrischen.
+        const permissionResult = await Notifications.getPermissionsAsync()
 
         if (!permissionResult.granted) {
           return

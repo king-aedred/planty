@@ -21,6 +21,10 @@ export type NotifyChannel = 'push' | 'telegram' | 'call'
 // Ergebnis des Onboardings; das Anlegen übernimmt der Aufrufer (echt: Convex, Vorschau: nichts).
 export type OnboardingResult = {
   withSensor: boolean
+  // Gekoppelter Sensor (device_id), sonst null.
+  deviceId: string | null
+  // pair-sensor: bestehende Pflanze, die den Sensor bekommt; null = neue Pflanze anlegen.
+  assignedPlantId: string | null
   species: Species | null
   name: string
   character: PlantCharacter
@@ -35,6 +39,7 @@ type Step =
   | 'qr'
   | 'connect'
   | 'paired'
+  | 'legacy-pair'
   | 'assign'
   | 'plant'
   | 'character'
@@ -46,10 +51,19 @@ type Step =
 
 type OnboardingFlowProps = {
   // Arten passend zur Suche (echt: Convex-Suche, Vorschau: Beispielliste).
-  searchSpecies: (search: string) => Species[]
+  // Hook: wird bei jedem Rendern mit dem aktuellen Suchtext aufgerufen (echt: useQuery, Vorschau: Beispielliste).
+  useSpeciesSearch: (search: string) => Species[]
   // „Später“ oder „Los geht's“: wohin danach (Dashboard).
   homePath: string
-  onComplete?: (result: OnboardingResult) => void
+  // Anlegen (echt: Convex). Gibt eine Fehlermeldung zurück, wenn es nicht geklappt hat.
+  onComplete?: (result: OnboardingResult) => Promise<string | null> | void
+  // „Später“ im Onboarding (echt: Onboarding als erledigt markieren).
+  onSkip?: () => void
+  // Bis zur neuen BLE-Anbindung (Phase B): bestehender Kopplungs-Baustein statt der neuen Schritte.
+  // Ruft onPaired mit der device_id, sobald der Sensor zugeordnet ist.
+  legacyPairing?: (onPaired: (deviceId: string) => void) => React.ReactNode
+  // add-plant: schon gekoppelter, freier Sensor (z. B. aus dem Sensor-Detail); Sensor-Schritte entfallen.
+  presetDeviceId?: string
   // Technik hinter der Sensor-Kopplung (Vorschau: mockPairing).
   pairing: PairingAdapter
   // Technik hinter der Kanal-Einrichtung (Vorschau: mockChannels).
@@ -67,6 +81,7 @@ type OnboardingFlowProps = {
 
 // Schritte der Sensor-Kopplung, für Pfad und Fortschrittsleiste.
 const SENSOR_STEPS: Step[] = ['plugin', 'scan', 'wifi', 'connect', 'paired']
+const LEGACY_SENSOR_STEPS: Step[] = ['legacy-pair']
 // Einrichtung der gewählten Kanäle, in dieser Reihenfolge nach der Kanal-Auswahl.
 const CHANNEL_SETUP: { channel: NotifyChannel; step: Step }[] = [
   { channel: 'push', step: 'push-setup' },
@@ -84,7 +99,7 @@ const CONNECT_ERRORS: Record<ConnectFailure, string> = {
 // Onboarding nach der ersten Anmeldung (Plan in docs/SCREENS.md): Start → (Sensor) → Pflanze → Persönlichkeit
 // → Kanäle → fertig. Jeder Schritt tauscht nur die Box im gemeinsamen Auth-Rahmen.
 export function OnboardingFlow({
-  searchSpecies,
+  useSpeciesSearch,
   homePath,
   onComplete,
   pairing,
@@ -92,13 +107,21 @@ export function OnboardingFlow({
   mode = 'onboarding',
   onExit,
   freePlants = [],
+  onSkip,
+  legacyPairing,
+  presetDeviceId,
   preview = false,
 }: OnboardingFlowProps) {
   const shell = React.useRef<AuthShellHelpers | null>(null)
-  const [step, setStep] = React.useState<Step>(mode === 'pair-sensor' ? 'plugin' : 'start')
+  const firstSensorStep: Step = legacyPairing ? 'legacy-pair' : 'plugin'
+  const [step, setStep] = React.useState<Step>(mode === 'pair-sensor' ? firstSensorStep : presetDeviceId ? 'plant' : 'start')
   const [withSensor, setWithSensor] = React.useState(mode === 'pair-sensor')
   // pair-sensor: bestehende Pflanze, der der Sensor zugeordnet wird (null = neue Pflanze anlegen).
   const [assignedPlant, setAssignedPlant] = React.useState<{ id: string; name: string } | null>(null)
+  // Über den bestehenden Kopplungs-Baustein gekoppelter Sensor.
+  const [legacyDeviceId, setLegacyDeviceId] = React.useState<string | null>(presetDeviceId ?? null)
+  const [isCompleting, setIsCompleting] = React.useState(false)
+  const [completeError, setCompleteError] = React.useState('')
   const [speciesSearch, setSpeciesSearch] = React.useState('')
   const [species, setSpecies] = React.useState<Species | null>(null)
   const [isManual, setIsManual] = React.useState(false)
@@ -160,7 +183,7 @@ export function OnboardingFlow({
   const setupSteps = CHANNEL_SETUP.filter((entry) => channels.includes(entry.channel)).map((entry) => entry.step)
   const plantSteps: Step[] = mode === 'pair-sensor' ? ['assign', ...(assignedPlant ? [] : (['plant', 'character'] as Step[]))] : ['plant', 'character']
   const path: Step[] = [
-    ...(withSensor ? SENSOR_STEPS : []),
+    ...(withSensor ? (legacyPairing ? LEGACY_SENSOR_STEPS : SENSOR_STEPS) : []),
     ...plantSteps,
     ...(mode === 'onboarding' ? (['channels', ...setupSteps] as Step[]) : []),
     'ready',
@@ -174,6 +197,7 @@ export function OnboardingFlow({
   // Der QR-Scan zählt als Teil des WLAN-Schritts.
   const progressStep = step === 'qr' ? 'wifi' : step
   const progress = step === 'start' ? 0 : (path.indexOf(progressStep) + 1) / path.length
+  const speciesMatches = useSpeciesSearch(speciesSearch)
   const speciesName = species?.common_name ?? manualSpecies.trim()
   // Leer gelassener Name: die Pflanze heißt wie ihre Art.
   const plantName = assignedPlant?.name ?? (nickname.trim() || speciesName || 'Deine Pflanze')
@@ -238,8 +262,26 @@ export function OnboardingFlow({
     }
   }
 
-  const complete = () => {
-    onComplete?.({ withSensor, species, name: plantName, character: character ?? 'neutral', channels })
+  const complete = async () => {
+    if (isCompleting) {
+      return
+    }
+    setCompleteError('')
+    setIsCompleting(true)
+    const error = await onComplete?.({
+      withSensor,
+      deviceId: legacyDeviceId ?? device?.deviceId ?? null,
+      assignedPlantId: assignedPlant?.id ?? null,
+      species,
+      name: plantName,
+      character: character ?? 'neutral',
+      channels,
+    })
+    setIsCompleting(false)
+    if (error) {
+      setCompleteError(error)
+      return
+    }
     leave()
   }
 
@@ -254,6 +296,18 @@ export function OnboardingFlow({
     <AuthShell preview={preview} progress={progress} smoothLayout>
       {(helpers) => {
         shell.current = helpers
+
+        if (step === 'legacy-pair' && legacyPairing) {
+          return (
+            <YStack gap="$12">
+              {legacyPairing((deviceId) => {
+                setLegacyDeviceId(deviceId)
+                goTo(stepAfter('legacy-pair'))
+              })}
+              <XStack paddingHorizontal="$4">{backLink(stepBefore('legacy-pair'))}</XStack>
+            </YStack>
+          )
+        }
 
         if (step === 'plugin') {
           return <PlugInCard onNext={startScan} back={backLink(stepBefore('plugin'))} />
@@ -366,7 +420,7 @@ export function OnboardingFlow({
                   setSpecies(null)
                   setIsManual(false)
                 }}
-                results={species ? [] : searchSpecies(speciesSearch)}
+                results={species ? [] : speciesMatches}
                 selected={species}
                 onSelect={(selected) => {
                   setSpecies(selected)
@@ -472,12 +526,19 @@ export function OnboardingFlow({
                   {assignedPlant ? `${plantName} hat jetzt einen Sensor!` : `${plantName} ist bereit!`}
                 </Text>
                 <Text fontFamily="$body" color="$textSecondary" fontSize={15} lineHeight="$5" textAlign="center">
-                  {withSensor
+                  {withSensor || presetDeviceId
                     ? `Sobald dein Sensor misst, meldet sich ${plantName} bei dir.`
                     : 'Ohne Sensor gibt es noch keine Messwerte. Du kannst jederzeit einen koppeln.'}
                 </Text>
               </YStack>
-              <Button onPress={complete}>{mode === 'onboarding' ? 'Los geht\'s' : 'Fertig'}</Button>
+              {completeError ? (
+                <Text fontFamily="$body" fontSize={12} color="$critical" textAlign="center">
+                  {completeError}
+                </Text>
+              ) : null}
+              <Button onPress={() => void complete()} loading={isCompleting}>
+                {mode === 'onboarding' ? 'Los geht\'s' : 'Fertig'}
+              </Button>
               <XStack>{backLink(stepBefore('ready'))}</XStack>
             </Card>
           )
@@ -493,7 +554,7 @@ export function OnboardingFlow({
               <Button
                 onPress={() => {
                   setWithSensor(true)
-                  goTo('plugin')
+                  goTo(firstSensorStep)
                 }}
               >
                 Ja, Sensor koppeln
@@ -523,7 +584,7 @@ export function OnboardingFlow({
             <Button
               onPress={() => {
                 setWithSensor(true)
-                goTo('plugin')
+                goTo(firstSensorStep)
               }}
             >
               Ich habe einen Sensor
@@ -537,7 +598,13 @@ export function OnboardingFlow({
             >
               Nur eine Pflanze anlegen
             </Button>
-            <Button variant="ghost" onPress={() => helpers.finish(homePath)}>
+            <Button
+              variant="ghost"
+              onPress={() => {
+                onSkip?.()
+                helpers.finish(homePath)
+              }}
+            >
               Später
             </Button>
           </Card>

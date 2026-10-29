@@ -295,6 +295,26 @@ export const disconnectTelegram = mutation({
   },
 });
 
+// Onboarding abschließen. Mit channels werden die gewählten Kanäle für Warnungen und kritische Zustände
+// übernommen (ok bleibt still); ohne channels („Später“) bleiben die Regeln unverändert.
+export const completeOnboarding = mutation({
+  args: {
+    channels: v.optional(v.array(notificationChannelValue)),
+  },
+  handler: async (ctx, args) => {
+    const user = await getAuthenticatedUser(ctx);
+
+    await ctx.db.patch(user._id, {
+      onboarding_done: true,
+      ...(args.channels
+        ? { notification_rules: { ok: [], warning: args.channels, critical: args.channels } }
+        : {}),
+    });
+
+    return user._id;
+  },
+});
+
 export const isDevUser = query({
   args: {
     clerk_id: v.string(),

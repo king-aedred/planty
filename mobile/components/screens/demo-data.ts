@@ -5,9 +5,11 @@ import type { Species } from '@/components/plants/species-picker'
 // der Pflanze bzw. dem Sensor abgeleitet, damit dieselbe Pflanze immer gleich aussieht.
 
 export type DemoSensor = {
+  // Geräte-ID (cg-XXXXXX); in der Vorschau optional.
+  deviceId?: string
   name: string
   plantName: string | null
-  battery: number
+  battery: number | null
   charging: boolean
   rssi: number
   ssid: string
