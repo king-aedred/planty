@@ -10,10 +10,12 @@ import React, { type ComponentProps } from 'react'
 import { Text, useTheme, XStack, YStack } from 'tamagui'
 import { type ConnectFailure, type ConnectStage, type PairingAdapter, type WifiNetwork } from './sensor-pairing'
 import { WifiQrScanner } from '@/components/ui/wifi-qr-scanner'
+import { type ChannelAdapter } from './channel-setup'
+import { CallSetupCard, PushSetupCard, TelegramSetupCard } from './channel-steps'
 import { ConnectCard, MockQrCard, PairedCard, PlugInCard, ScanCard, WifiCard } from './sensor-steps'
 
 export type PlantCharacter = 'happy' | 'grumpy' | 'neutral'
-export type NotifyChannel = 'push' | 'telegram'
+export type NotifyChannel = 'push' | 'telegram' | 'call'
 
 // Ergebnis des Onboardings; das Anlegen übernimmt der Aufrufer (echt: Convex, Vorschau: nichts).
 export type OnboardingResult = {
@@ -24,7 +26,21 @@ export type OnboardingResult = {
   channels: NotifyChannel[]
 }
 
-type Step = 'start' | 'plugin' | 'scan' | 'wifi' | 'qr' | 'connect' | 'paired' | 'plant' | 'character' | 'channels' | 'ready'
+type Step =
+  | 'start'
+  | 'plugin'
+  | 'scan'
+  | 'wifi'
+  | 'qr'
+  | 'connect'
+  | 'paired'
+  | 'plant'
+  | 'character'
+  | 'channels'
+  | 'push-setup'
+  | 'telegram-setup'
+  | 'call-setup'
+  | 'ready'
 
 type OnboardingFlowProps = {
   // Arten passend zur Suche (echt: Convex-Suche, Vorschau: Beispielliste).
@@ -34,6 +50,8 @@ type OnboardingFlowProps = {
   onComplete?: (result: OnboardingResult) => void
   // Technik hinter der Sensor-Kopplung (Vorschau: mockPairing).
   pairing: PairingAdapter
+  // Technik hinter der Kanal-Einrichtung (Vorschau: mockChannels).
+  channelSetup: ChannelAdapter
   preview?: boolean
 }
 
@@ -44,8 +62,14 @@ const CHARACTERS: { value: PlantCharacter; label: string; description: string; c
 ]
 
 // Reihenfolge der Schritte je Pfad, für die Fortschrittsleiste.
-const SENSOR_PATH: Step[] = ['plugin', 'scan', 'wifi', 'connect', 'paired', 'plant', 'character', 'channels', 'ready']
-const PLANT_PATH: Step[] = ['plant', 'character', 'channels', 'ready']
+const SENSOR_PATH: Step[] = ['plugin', 'scan', 'wifi', 'connect', 'paired', 'plant', 'character', 'channels']
+const PLANT_PATH: Step[] = ['plant', 'character', 'channels']
+// Einrichtung der gewählten Kanäle, in dieser Reihenfolge nach der Kanal-Auswahl.
+const CHANNEL_SETUP: { channel: NotifyChannel; step: Step }[] = [
+  { channel: 'push', step: 'push-setup' },
+  { channel: 'telegram', step: 'telegram-setup' },
+  { channel: 'call', step: 'call-setup' },
+]
 
 const CONNECT_ERRORS: Record<ConnectFailure, string> = {
   auth_failed: 'Das Passwort stimmt nicht.',
@@ -56,7 +80,7 @@ const CONNECT_ERRORS: Record<ConnectFailure, string> = {
 
 // Onboarding nach der ersten Anmeldung (Plan in docs/SCREENS.md): Start → (Sensor) → Pflanze → Persönlichkeit
 // → Kanäle → fertig. Jeder Schritt tauscht nur die Box im gemeinsamen Auth-Rahmen.
-export function OnboardingFlow({ searchSpecies, homePath, onComplete, pairing, preview = false }: OnboardingFlowProps) {
+export function OnboardingFlow({ searchSpecies, homePath, onComplete, pairing, channelSetup, preview = false }: OnboardingFlowProps) {
   const shell = React.useRef<AuthShellHelpers | null>(null)
   const [step, setStep] = React.useState<Step>('start')
   const [withSensor, setWithSensor] = React.useState(false)
@@ -118,7 +142,11 @@ export function OnboardingFlow({ searchSpecies, homePath, onComplete, pairing, p
     }
   }, [networks, pairing, step])
 
-  const path = withSensor ? SENSOR_PATH : PLANT_PATH
+  const setupSteps = CHANNEL_SETUP.filter((entry) => channels.includes(entry.channel)).map((entry) => entry.step)
+  const path: Step[] = [...(withSensor ? SENSOR_PATH : PLANT_PATH), ...setupSteps, 'ready']
+  // Nächster bzw. vorheriger Schritt ab der Kanal-Auswahl (Einrichtungen, dann fertig).
+  const stepAfter = (current: Step): Step => path[path.indexOf(current) + 1] ?? 'ready'
+  const stepBefore = (current: Step): Step => path[path.indexOf(current) - 1] ?? 'channels'
   // Der QR-Scan zählt als Teil des WLAN-Schritts.
   const progressStep = step === 'qr' ? 'wifi' : step
   const progress = step === 'start' ? 0 : (path.indexOf(progressStep) + 1) / path.length
@@ -368,12 +396,35 @@ export function OnboardingFlow({ searchSpecies, homePath, onComplete, pairing, p
                   selected={channels.includes('telegram')}
                   onPress={() => toggleChannel('telegram')}
                 />
-                <ChannelOption icon="call-outline" title="Anruf" description="Kommt bald" selected={false} disabled />
+                <ChannelOption
+                  icon="call-outline"
+                  title="Anruf"
+                  description="Bei Notfällen ruft sie dich an"
+                  selected={channels.includes('call')}
+                  onPress={() => toggleChannel('call')}
+                />
               </YStack>
-              <Button onPress={() => goTo('ready')}>{channels.length > 0 ? 'Weiter' : 'Ohne Benachrichtigungen weiter'}</Button>
+              <Button onPress={() => goTo(stepAfter('channels'))}>{channels.length > 0 ? 'Weiter' : 'Ohne Benachrichtigungen weiter'}</Button>
               <XStack>{backLink('character')}</XStack>
             </Card>
           )
+        }
+
+        if (step === 'push-setup' || step === 'telegram-setup' || step === 'call-setup') {
+          const setupProps = {
+            plantName,
+            channels: channelSetup,
+            onDone: () => goTo(stepAfter(step)),
+            back: backLink(stepBefore(step)),
+            ignoreReducedMotion: preview,
+          }
+          if (step === 'push-setup') {
+            return <PushSetupCard key={step} {...setupProps} />
+          }
+          if (step === 'telegram-setup') {
+            return <TelegramSetupCard key={step} {...setupProps} />
+          }
+          return <CallSetupCard key={step} {...setupProps} />
         }
 
         if (step === 'ready') {
@@ -391,7 +442,7 @@ export function OnboardingFlow({ searchSpecies, homePath, onComplete, pairing, p
                 </Text>
               </YStack>
               <Button onPress={complete}>Los geht&apos;s</Button>
-              <XStack>{backLink('channels')}</XStack>
+              <XStack>{backLink(stepBefore('ready'))}</XStack>
             </Card>
           )
         }

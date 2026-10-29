@@ -19,6 +19,8 @@ export type DashboardPlant = {
   speciesName?: string | null
   // Letzte Nachricht der Pflanze, als Zitat in der Detailansicht.
   quote?: string | null
+  // Pflanze ohne gekoppelten Sensor: keine Messwerte, eigener Zustand mit „Sensor koppeln“.
+  hasSensor?: boolean
   summary: {
     moisture_median: number
     temperature_median?: number
@@ -87,8 +89,6 @@ export function PlantDashboard(props: PlantDashboardProps) {
                 </XStack>
               ) : null}
             </YStack>
-            {/* TODO Platzhalter: Filter hat noch keine Funktion. */}
-            <RoundIconButton icon="options-outline" label="Filter" onPress={() => undefined} />
           </XStack>
 
           {!isEmpty ? <ViewSwitcher value={view} onChange={setView} /> : null}
@@ -102,7 +102,7 @@ export function PlantDashboard(props: PlantDashboardProps) {
               {view === 'compact' ? (
                 <CompactRow plant={plant} onPress={() => props.onOpenPlant(plant.id)} />
               ) : (
-                <DetailedCard plant={plant} onPress={() => props.onOpenPlant(plant.id)} />
+                <DetailedCard plant={plant} onPress={() => props.onOpenPlant(plant.id)} onPairSensor={props.onPairSensor} />
               )}
             </FadeIn>
           ))}
@@ -196,25 +196,6 @@ function DashboardHeader({
   )
 }
 
-function RoundIconButton({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
-  const theme = useTheme()
-  return (
-    <YStack
-      role="button"
-      aria-label={label}
-      onPress={onPress}
-      width={40}
-      height={40}
-      borderRadius="$999"
-      backgroundColor="$surfaceElevated press:$surfaceHigh"
-      alignItems="center"
-      justifyContent="center"
-    >
-      <Ionicons name={icon} size={20} color={theme.textSecondary?.val} />
-    </YStack>
-  )
-}
-
 function ViewSwitcher({ value, onChange }: { value: View; onChange: (view: View) => void }) {
   const theme = useTheme()
   const options: { value: View; label: string; icon: IconName }[] = [
@@ -254,7 +235,7 @@ function ViewSwitcher({ value, onChange }: { value: View; onChange: (view: View)
 
 function CompactRow({ plant, onPress }: { plant: DashboardPlant; onPress: () => void }) {
   const theme = useTheme()
-  const status = overallStatus(plant.summary)
+  const status = plantStatus(plant)
 
   return (
     <XStack
@@ -284,8 +265,9 @@ function CompactRow({ plant, onPress }: { plant: DashboardPlant; onPress: () => 
   )
 }
 
-function DetailedCard({ plant, onPress }: { plant: DashboardPlant; onPress: () => void }) {
-  const status = overallStatus(plant.summary)
+function DetailedCard({ plant, onPress, onPairSensor }: { plant: DashboardPlant; onPress: () => void; onPairSensor: () => void }) {
+  const status = plantStatus(plant)
+  const withoutSensor = plant.hasSensor === false
   const summary = plant.summary
   const moistureColor = summary?.moisture_state === 'critical' ? 'criticalText' : summary?.moisture_state === 'warning' ? 'warning' : 'success'
 
@@ -307,16 +289,29 @@ function DetailedCard({ plant, onPress }: { plant: DashboardPlant; onPress: () =
             <Text fontFamily="$heading" fontSize={20} letterSpacing={0.4} textTransform="uppercase" color="$textPrimary" numberOfLines={1}>
               {plant.name}
             </Text>
-            <Text fontFamily="$body" fontSize={12} color="$textSecondary" numberOfLines={1}>
-              {/* TODO Platzhalter: Standort gibt es im Backend noch nicht. */}
-              {plant.speciesName ? `${plant.speciesName} · ` : ''}Standort folgt
-            </Text>
+            {plant.speciesName ? (
+              <Text fontFamily="$body" fontSize={12} color="$textSecondary" numberOfLines={1}>
+                {plant.speciesName}
+              </Text>
+            ) : null}
           </YStack>
         </XStack>
         <Badge tone={status.tone as BadgeTone} label={status.label} />
       </XStack>
 
-      {summary ? (
+      {withoutSensor ? (
+        <XStack alignItems="center" justifyContent="space-between" gap="$8" paddingTop="$8" borderTopWidth={1} borderColor="$border">
+          <Text flex={1} fontFamily="$body" fontSize={13} color="$textSecondary">
+            Ohne Sensor gibt es keine Messwerte.
+          </Text>
+          <XStack role="button" onPress={onPairSensor} alignItems="center" gap="$4" opacity="1 press:0.7">
+            <ThemedIcon name="radio-outline" size={14} color="accentText" />
+            <Text fontFamily="$body" fontWeight="700" fontSize={12} letterSpacing={0.6} textTransform="uppercase" color="$accentText">
+              Sensor koppeln
+            </Text>
+          </XStack>
+        </XStack>
+      ) : summary ? (
         <XStack alignItems="center" justifyContent="space-between" paddingTop="$8" borderTopWidth={1} borderColor="$border">
           <Metric icon="water" iconColor={moistureColor} value={`${formatNumber(summary.moisture_median)}%`} label="Boden" emphasis={summary.moisture_state !== 'ok'} valueColor={summary.moisture_state === 'ok' ? 'textPrimary' : moistureColor} />
           <Text color="$outlineVariant">·</Text>
@@ -330,12 +325,14 @@ function DetailedCard({ plant, onPress }: { plant: DashboardPlant; onPress: () =
         </Text>
       )}
 
-      <XStack alignItems="center" justifyContent="space-between" gap="$8">
-        <Text flex={1} fontFamily="$body" fontSize={12} color={status.tone === 'critical' ? '$criticalText' : status.tone === 'warning' ? '$warning' : '$textSecondary'} numberOfLines={1}>
-          „{plant.quote ?? defaultQuote(status.tone)}“
-        </Text>
-        <CardAction tone={status.tone} onDetails={onPress} />
-      </XStack>
+      {withoutSensor ? null : (
+        <XStack alignItems="center" justifyContent="space-between" gap="$8">
+          <Text flex={1} fontFamily="$body" fontSize={12} color={status.tone === 'critical' ? '$criticalText' : status.tone === 'warning' ? '$warning' : '$textSecondary'} numberOfLines={1}>
+            „{plant.quote ?? defaultQuote(status.tone)}“
+          </Text>
+          <CardAction hint={criticalHint(plant.summary)} onDetails={onPress} />
+        </XStack>
+      )}
     </YStack>
   )
 }
@@ -368,25 +365,15 @@ function Metric({
   )
 }
 
-function CardAction({ tone, onDetails }: { tone: PlantStatusTone; onDetails: () => void }) {
-  if (tone === 'critical') {
-    // TODO Platzhalter: "Jetzt gießen" hat noch keine Funktion (keine Gieß-Aktion im Backend).
+// Rechts unten auf der Karte: bei kritischem Zustand ein Hinweis, was fehlt (kein Knopf, die App kann
+// ja nicht selbst gießen), sonst „Details“.
+function CardAction({ hint, onDetails }: { hint: string | null; onDetails: () => void }) {
+  if (hint) {
     return (
-      <XStack role="button" onPress={() => undefined} alignItems="center" gap="$4" paddingHorizontal={10} paddingVertical="$4" borderRadius="$999" backgroundColor="$criticalText" opacity="1 press:0.85">
-        <ThemedIcon name="water" size={13} color="onCritical" />
-        <Text fontFamily="$body" fontWeight="700" fontSize={11} letterSpacing={0.6} textTransform="uppercase" color="$onCritical">
-          Jetzt gießen
-        </Text>
-      </XStack>
-    )
-  }
-  if (tone === 'warning') {
-    // TODO Platzhalter: "Gegossen" hat noch keine Funktion.
-    return (
-      <XStack role="button" onPress={() => undefined} alignItems="center" gap="$4" opacity="1 press:0.7">
-        <ThemedIcon name="water" size={14} color="warning" />
-        <Text fontFamily="$body" fontWeight="700" fontSize={12} letterSpacing={0.6} textTransform="uppercase" color="$warning">
-          Gegossen
+      <XStack alignItems="center" gap="$4" paddingHorizontal={10} paddingVertical="$4" borderRadius="$999" backgroundColor="$criticalSoft">
+        <ThemedIcon name="water" size={13} color="criticalText" />
+        <Text fontFamily="$body" fontWeight="700" fontSize={11} letterSpacing={0.6} textTransform="uppercase" color="$criticalText">
+          {hint}
         </Text>
       </XStack>
     )
@@ -434,25 +421,25 @@ function EmptyTeaser() {
       <Text fontFamily="$body" fontSize={13} lineHeight="$3" color="$textSecondary" textAlign="center" maxWidth={280}>
         Verbinde deinen ersten Sensor und erfahre, wie es deinen Pflanzen geht.
       </Text>
-      <XStack gap="$8" marginTop="$4">
-        <Chip label="Automatische Analyse" color="$success" />
-        <Chip label="Sofort-Tipps" color="$secondary" />
-      </XStack>
-    </YStack>
-  )
-}
-
-function Chip({ label, color }: { label: string; color: string }) {
-  return (
-    <YStack paddingHorizontal="$12" paddingVertical="$4" borderRadius="$999" backgroundColor="$surfaceElevated">
-      <Text fontFamily="$body" fontWeight="700" fontSize={11} color={color}>
-        {label}
-      </Text>
     </YStack>
   )
 }
 
 // --- Zustand ableiten ------------------------------------------------------------
+
+// Pflanze ohne Sensor: eigener, neutraler Zustand.
+function plantStatus(plant: DashboardPlant): { tone: PlantStatusTone; label: string } {
+  if (plant.hasSensor === false) return { tone: 'neutral', label: 'Kein Sensor' }
+  return overallStatus(plant.summary)
+}
+
+// Was bei kritischem Zustand fehlt, in zwei Worten; null = nicht kritisch.
+function criticalHint(summary: DashboardPlant['summary']): string | null {
+  if (!summary) return null
+  if (summary.moisture_state === 'critical') return 'Braucht Wasser'
+  if (summary.temperature_state === 'hot') return 'Zu heiß'
+  return null
+}
 
 // Fehlende Temperatur/Licht (Sensor ausgefallen) gilt wie im Backend als unauffällig.
 function overallStatus(summary: DashboardPlant['summary']): { tone: PlantStatusTone; label: string } {

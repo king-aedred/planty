@@ -21,7 +21,7 @@ import { type ConnectStage, signalBars, type WifiNetwork } from './sensor-pairin
 // Bausteine der Sensor-Kopplung (A1–A5 aus docs/SCREENS.md). Reine Darstellung; Ablauf und Technik
 // stecken in onboarding-flow.tsx bzw. sensor-pairing.ts.
 
-function Heading({ label, title, text }: { label: string; title: string; text?: string }) {
+export function Heading({ label, title, text }: { label: string; title: string; text?: string }) {
   return (
     <>
       <SectionLabel>{label}</SectionLabel>
@@ -38,7 +38,7 @@ function Heading({ label, title, text }: { label: string; title: string; text?: 
 }
 
 // Runde Fläche mit Symbol in der Mitte, optional mit pulsierenden Ringen (Suche läuft).
-function IconStage({ children, pulsing = false, ignoreReducedMotion = false }: { children: ReactNode; pulsing?: boolean; ignoreReducedMotion?: boolean }) {
+export function IconStage({ children, pulsing = false, ignoreReducedMotion = false }: { children: ReactNode; pulsing?: boolean; ignoreReducedMotion?: boolean }) {
   return (
     <YStack height={150} alignItems="center" justifyContent="center">
       {pulsing ? [0, 1, 2].map((index) => <PulseRing key={index} delay={index * 600} ignoreReducedMotion={ignoreReducedMotion} />) : null}

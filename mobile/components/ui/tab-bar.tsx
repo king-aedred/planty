@@ -24,6 +24,31 @@ type TabBarProps = BottomTabBarProps & {
 // Schwebende Tab-Leiste nach dem Stitch-Template: abgerundete Fläche, aktiver Tab in Akzenttext.
 // ABWEICHUNG: kein Unschärfe-Effekt (expo-blur ist nicht installiert), stattdessen halbtransparente Fläche.
 export function TabBar({ state, navigation, dots = {} }: TabBarProps) {
+  const activeName = state.routes[state.index]?.name ?? ''
+  return (
+    <TabBarView
+      routes={state.routes.map((route) => route.name)}
+      active={activeName}
+      dots={dots}
+      onSelect={(name) => {
+        const route = state.routes.find((entry) => entry.name === name)
+        if (!route) return
+        const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true })
+        if (name !== activeName && !event.defaultPrevented) navigation.navigate(name)
+      }}
+    />
+  )
+}
+
+type TabBarViewProps = {
+  routes: string[]
+  active: string
+  onSelect: (name: string) => void
+  dots?: Record<string, boolean>
+}
+
+// Darstellung der Leiste ohne Navigation (auch für Vorschau-Seiten).
+export function TabBarView({ routes, active, onSelect, dots = {} }: TabBarViewProps) {
   const theme = useTheme()
   const insets = useSafeAreaInsets()
 
@@ -41,22 +66,19 @@ export function TabBar({ state, navigation, dots = {} }: TabBarProps) {
         // Tamagui 3: Schatten über boxShadow (shadow*/elevation gibt es nicht mehr).
         boxShadow="0px 8px 24px rgba(0, 0, 0, 0.45)"
       >
-        {state.routes.map((route, index) => {
-          const item = TAB_ITEMS[route.name]
+        {routes.map((name) => {
+          const item = TAB_ITEMS[name]
           if (!item) return null
-          const isActive = state.index === index
+          const isActive = name === active
           const color = isActive ? theme.accentText?.val : theme.textSecondary?.val
 
           return (
             <YStack
-              key={route.key}
+              key={name}
               role="tab"
               aria-selected={isActive}
               aria-label={item.label}
-              onPress={() => {
-                const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true })
-                if (!isActive && !event.defaultPrevented) navigation.navigate(route.name)
-              }}
+              onPress={() => onSelect(name)}
               alignItems="center"
               justifyContent="center"
               gap="$2"
@@ -68,7 +90,7 @@ export function TabBar({ state, navigation, dots = {} }: TabBarProps) {
             >
               <YStack position="relative">
                 <Ionicons name={isActive ? item.iconActive : item.icon} size={22} color={color} />
-                {dots[route.name] ? (
+                {dots[name] ? (
                   <YStack position="absolute" top={-2} right={-4} width={8} height={8} borderRadius="$999" backgroundColor="$accentText" />
                 ) : null}
               </YStack>

@@ -51,6 +51,7 @@ export default function PlantListScreen() {
         speciesName: species && !(species instanceof Error) ? species.name : null,
         quote: deviceId ? latestByDevice.get(deviceId)?.text ?? null : null,
         summary: plant.latestSummary ?? null,
+        hasSensor: Boolean(deviceId),
       }
     })
   }, [messages, plants, speciesResults])

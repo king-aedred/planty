@@ -6,7 +6,7 @@ export const MOCK_CODE = '111111'
 // Registrieren mit dieser Adresse simuliert „E-Mail schon vergeben“.
 export const MOCK_TAKEN_EMAIL = 'vergeben@test.test'
 // Nach erfolgreichem Code geht es hierhin (Dashboard mit Demodaten).
-export const MOCK_HOME = '/dashboard-preview'
+export const MOCK_HOME = '/preview/7-app'
 
 // Simulierte Antwortzeit des Servers.
 export function mockDelay(ms = 700) {
