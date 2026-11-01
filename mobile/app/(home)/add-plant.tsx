@@ -1,8 +1,7 @@
-import { legacyPairingStep } from '@/components/onboarding/legacy-pairing'
 import { mockChannels } from '@/components/onboarding/channel-setup'
 import { OnboardingFlow } from '@/components/onboarding/onboarding-flow'
-import { mockPairing } from '@/components/onboarding/sensor-pairing'
 import { LoadingScreen } from '@/components/ui/loading-screen'
+import { useBlePairing } from '@/hooks/use-ble-pairing'
 import { useGarden } from '@/hooks/use-garden'
 import { useOnboardingActions } from '@/hooks/use-onboarding-actions'
 import { useSpeciesSearch } from '@/hooks/use-species-search'
@@ -14,6 +13,7 @@ export default function AddPlantScreen() {
   const router = useRouter()
   const { device_id: presetDeviceId } = useLocalSearchParams<{ device_id?: string }>()
   const garden = useGarden()
+  const pairing = useBlePairing()
   const actions = useOnboardingActions(garden.clerkId)
 
   if (!garden.clerkId) {
@@ -25,8 +25,7 @@ export default function AddPlantScreen() {
       mode="add-plant"
       useSpeciesSearch={useSpeciesSearch}
       homePath="/(home)/(tabs)/plant-list"
-      pairing={mockPairing}
-      legacyPairing={legacyPairingStep}
+      pairing={pairing}
       // Kanäle kommen in diesem Ablauf nicht vor.
       channelSetup={mockChannels}
       presetDeviceId={presetDeviceId || undefined}

@@ -1,8 +1,7 @@
-import { legacyPairingStep } from '@/components/onboarding/legacy-pairing'
 import { mockChannels } from '@/components/onboarding/channel-setup'
 import { OnboardingFlow } from '@/components/onboarding/onboarding-flow'
-import { mockPairing } from '@/components/onboarding/sensor-pairing'
 import { LoadingScreen } from '@/components/ui/loading-screen'
+import { useBlePairing } from '@/hooks/use-ble-pairing'
 import { deviceOf, useGarden } from '@/hooks/use-garden'
 import { useOnboardingActions } from '@/hooks/use-onboarding-actions'
 import { useSpeciesSearch } from '@/hooks/use-species-search'
@@ -12,6 +11,7 @@ import { useRouter } from 'expo-router'
 export default function AddSensorScreen() {
   const router = useRouter()
   const garden = useGarden()
+  const pairing = useBlePairing()
   const actions = useOnboardingActions(garden.clerkId)
 
   if (!garden.clerkId || garden.isLoading) {
@@ -25,8 +25,7 @@ export default function AddSensorScreen() {
       mode="pair-sensor"
       useSpeciesSearch={useSpeciesSearch}
       homePath="/(home)/(tabs)/sensors"
-      pairing={mockPairing}
-      legacyPairing={legacyPairingStep}
+      pairing={pairing}
       channelSetup={mockChannels}
       freePlants={freePlants}
       onComplete={(result) => actions.save(result)}

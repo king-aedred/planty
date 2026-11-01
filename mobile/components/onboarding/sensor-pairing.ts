@@ -1,19 +1,31 @@
 // Schnittstelle zwischen den Kopplungs-Schritten (Oberfläche) und der Technik dahinter.
-// Vorschau: mockPairing (simuliert). Echt: BLE-Provisioning (wird in Etappe 4 angebunden).
+// Vorschau: mockPairing (simuliert). Echt: createBlePairing in ble-pairing.ts (ESP-IDF Provisioning über BLE).
 
 export type WifiNetwork = { ssid: string; rssi: number; secure: boolean }
 
 export type ConnectStage = 'wifi' | 'claim' | 'done'
 export type ConnectFailure = 'auth_failed' | 'not_found' | 'timeout' | 'other'
-export type ConnectResult = { ok: true; deviceId: string } | { ok: false; reason: ConnectFailure }
+// message: konkreter Text vom Gerät bzw. Backend (z. B. Claim abgelaufen); sonst Standardtext je reason.
+export type ConnectResult = { ok: true; deviceId: string } | { ok: false; reason: ConnectFailure; message?: string }
+
+export type FoundDevice = { deviceName: string; deviceId: string }
+export type StepResult = { ok: true } | { ok: false; message: string }
 
 export type PairingAdapter = {
-  // Sucht per Bluetooth nach einem Sensor; null = nichts gefunden.
-  scan: () => Promise<{ deviceName: string; deviceId: string } | null>
+  // Voraussetzungen prüfen und Berechtigungen holen (Bluetooth, Standort auf Android).
+  prepare: () => Promise<StepResult>
+  // Sucht per Bluetooth nach Sensoren in der Nähe (leer = keiner gefunden).
+  scan: () => Promise<FoundDevice[]>
+  // Verbindung zum gewählten Sensor aufbauen und ihn dem Konto zuordnen (Claim-Token übergeben).
+  open: (device: FoundDevice) => Promise<StepResult>
   // WLANs, die der Sensor selbst sieht (stärkstes zuerst).
   listNetworks: () => Promise<WifiNetwork[]>
+  // Meldet, wenn der Sensor schon über sein gespeichertes WLAN online und zugeordnet ist (dann keine WLAN-Eingabe).
+  watchAlreadyOnline: (onOnline: (info: { deviceId: string; ssid: string | null }) => void) => () => void
   // Zugangsdaten senden, auf WLAN und Anmeldung bei Callgreen warten. onStage meldet den Fortschritt.
   connect: (ssid: string, password: string, onStage: (stage: ConnectStage) => void) => Promise<ConnectResult>
+  // Verbindung trennen (Ablauf verlassen).
+  close: () => void
 }
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
@@ -22,10 +34,17 @@ const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, 
 export const MOCK_WIFI_PASSWORD = '12345678'
 
 export const mockPairing: PairingAdapter = {
+  prepare: async () => ({ ok: true }),
   scan: async () => {
     await wait(2600)
-    return { deviceName: 'CALLGREEN-00A5D8', deviceId: 'cg-00A5D8' }
+    return [{ deviceName: 'CALLGREEN-00A5D8', deviceId: 'cg-00A5D8' }]
   },
+  open: async () => {
+    await wait(900)
+    return { ok: true }
+  },
+  watchAlreadyOnline: () => () => undefined,
+  close: () => undefined,
   listNetworks: async () => {
     await wait(900)
     return [

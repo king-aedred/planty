@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { ChoiceCard } from '@/components/ui/choice-card'
 import { FadeIn } from '@/components/ui/fade-in'
 import { SectionLabel } from '@/components/ui/section-label'
 import { TextField } from '@/components/ui/text-field'
@@ -16,7 +17,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated'
 import { Text, useTheme, XStack, YStack } from 'tamagui'
-import { type ConnectStage, signalBars, type WifiNetwork } from './sensor-pairing'
+import { type ConnectStage, type FoundDevice, signalBars, type WifiNetwork } from './sensor-pairing'
 
 // Bausteine der Sensor-Kopplung (A1–A5 aus docs/SCREENS.md). Reine Darstellung; Ablauf und Technik
 // stecken in onboarding-flow.tsx bzw. sensor-pairing.ts.
@@ -70,16 +71,23 @@ function PulseRing({ delay, ignoreReducedMotion }: { delay: number; ignoreReduce
   )
 }
 
-// A1: Sensor per USB einstecken.
-export function PlugInCard({ onNext, back }: { onNext: () => void; back: ReactNode }) {
+// A1: Sensor per USB einstecken. Danach fragt das Handy nach Bluetooth (Android: auch Standort).
+export function PlugInCard({ onNext, back, busy = false, error }: { onNext: () => void; back: ReactNode; busy?: boolean; error?: string }) {
   const theme = useTheme()
   return (
     <Card>
-      <Heading label="Sensor koppeln" title="Steck deinen Sensor ein" text="Verbinde ihn per USB-Kabel mit Strom. Dann ist er für ein paar Minuten bereit zum Koppeln." />
+      <Heading label="Sensor koppeln" title="Steck deinen Sensor ein" text="Verbinde ihn per USB-Kabel mit Strom. Gleich fragt dein Handy nach Bluetooth, damit die App ihn findet." />
       <IconStage>
         <MaterialCommunityIcons name="usb" size={38} color={theme.accentText?.val} />
       </IconStage>
-      <Button onPress={onNext}>Er ist eingesteckt</Button>
+      {error ? (
+        <Text fontFamily="$body" fontSize={13} lineHeight="$4" color="$critical" textAlign="center">
+          {error}
+        </Text>
+      ) : null}
+      <Button onPress={onNext} loading={busy}>
+        Er ist eingesteckt
+      </Button>
       <XStack>{back}</XStack>
     </Card>
   )
@@ -89,19 +97,51 @@ export function PlugInCard({ onNext, back }: { onNext: () => void; back: ReactNo
 export function ScanCard({
   state,
   deviceName,
+  devices = [],
+  error,
+  onChoose,
   onRetry,
   onNext,
   back,
   ignoreReducedMotion,
 }: {
-  state: 'searching' | 'found' | 'missing'
+  state: 'searching' | 'choose' | 'connecting' | 'found' | 'missing'
   deviceName?: string
+  // Mehrere Sensoren in Reichweite: Auswahl.
+  devices?: FoundDevice[]
+  // Grund, warum Verbinden nicht geklappt hat (sonst die Tipps für „nicht gefunden“).
+  error?: string
+  onChoose?: (device: FoundDevice) => void
   onRetry: () => void
   onNext: () => void
   back: ReactNode
   ignoreReducedMotion?: boolean
 }) {
   const theme = useTheme()
+
+  if (state === 'choose') {
+    return (
+      <Card>
+        <Heading label="Sensor koppeln" title="Welcher ist deiner?" text="Mehrere Sensoren sind in der Nähe. Der Name steht auch auf dem Aufkleber." />
+        <YStack gap="$8">
+          {devices.map((entry) => (
+            <ChoiceCard key={entry.deviceName} title={entry.deviceName} onPress={() => onChoose?.(entry)} />
+          ))}
+        </YStack>
+        <XStack>{back}</XStack>
+      </Card>
+    )
+  }
+
+  if (state === 'missing' && error) {
+    return (
+      <Card>
+        <Heading label="Sensor koppeln" title="Das hat nicht geklappt" text={error} />
+        <Button onPress={onRetry}>Nochmal suchen</Button>
+        <XStack>{back}</XStack>
+      </Card>
+    )
+  }
 
   if (state === 'missing') {
     return (
@@ -130,7 +170,7 @@ export function ScanCard({
   const isFound = state === 'found'
   return (
     <Card>
-      <Heading label="Sensor koppeln" title={isFound ? 'Sensor gefunden!' : 'Wir suchen deinen Sensor …'} />
+      <Heading label="Sensor koppeln" title={isFound ? 'Sensor gefunden!' : state === 'connecting' ? 'Verbinde …' : 'Wir suchen deinen Sensor …'} />
       <IconStage pulsing={!isFound} ignoreReducedMotion={ignoreReducedMotion}>
         <Ionicons name={isFound ? 'checkmark' : 'bluetooth'} size={36} color={theme.accentText?.val} />
       </IconStage>
@@ -148,7 +188,7 @@ export function ScanCard({
         </FadeIn>
       ) : (
         <Text fontFamily="$body" fontSize={13} color="$textSecondary" textAlign="center">
-          Halte dein Handy in die Nähe des Sensors.
+          {state === 'connecting' && deviceName ? `${deviceName} gefunden, einen Moment.` : 'Halte dein Handy in die Nähe des Sensors.'}
         </Text>
       )}
       <XStack>{back}</XStack>
@@ -373,7 +413,20 @@ export function ConnectCard({ ssid, reached }: { ssid: string; reached: ConnectS
 }
 
 // A5: Kopplung fertig.
-export function PairedCard({ deviceName, ssid, onNext, nextLabel = 'Weiter zur Pflanze' }: { deviceName: string; ssid: string; onNext: () => void; nextLabel?: string }) {
+export function PairedCard({
+  deviceName,
+  ssid,
+  onNext,
+  nextLabel = 'Weiter zur Pflanze',
+  alreadyOnline = false,
+}: {
+  deviceName: string
+  ssid: string
+  onNext: () => void
+  nextLabel?: string
+  // Sensor war schon über sein gespeichertes WLAN verbunden.
+  alreadyOnline?: boolean
+}) {
   const theme = useTheme()
   return (
     <Card>
@@ -385,8 +438,14 @@ export function PairedCard({ deviceName, ssid, onNext, nextLabel = 'Weiter zur P
         <Text fontFamily="$body" fontWeight="600" fontSize={15} color="$textPrimary">
           {deviceName}
         </Text>
-        <Text fontFamily="$body" fontSize={13} color="$textSecondary">
-          im WLAN „{ssid}“
+        <Text fontFamily="$body" fontSize={13} color="$textSecondary" textAlign="center">
+          {alreadyOnline
+            ? ssid
+              ? `War schon mit „${ssid}“ verbunden, du musst nichts eingeben.`
+              : 'War schon mit deinem WLAN verbunden, du musst nichts eingeben.'
+            : ssid
+              ? `im WLAN „${ssid}“`
+              : 'ist online'}
         </Text>
       </YStack>
       <Button onPress={onNext}>{nextLabel}</Button>

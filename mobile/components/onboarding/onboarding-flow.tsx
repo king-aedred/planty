@@ -10,7 +10,7 @@ import { TextField } from '@/components/ui/text-field'
 import { Ionicons } from '@expo/vector-icons'
 import React, { type ComponentProps } from 'react'
 import { Text, useTheme, XStack, YStack } from 'tamagui'
-import { type ConnectFailure, type ConnectStage, type PairingAdapter, type WifiNetwork } from './sensor-pairing'
+import { type ConnectFailure, type ConnectStage, type FoundDevice, type PairingAdapter, type WifiNetwork } from './sensor-pairing'
 import { WifiQrScanner } from '@/components/ui/wifi-qr-scanner'
 import { type ChannelAdapter } from './channel-setup'
 import { CallSetupCard, PushSetupCard, TelegramSetupCard } from './channel-steps'
@@ -39,7 +39,6 @@ type Step =
   | 'qr'
   | 'connect'
   | 'paired'
-  | 'legacy-pair'
   | 'assign'
   | 'plant'
   | 'character'
@@ -59,9 +58,6 @@ type OnboardingFlowProps = {
   onComplete?: (result: OnboardingResult) => Promise<string | null> | void
   // „Später“ im Onboarding (echt: Onboarding als erledigt markieren).
   onSkip?: () => void
-  // Bis zur neuen BLE-Anbindung (Phase B): bestehender Kopplungs-Baustein statt der neuen Schritte.
-  // Ruft onPaired mit der device_id, sobald der Sensor zugeordnet ist.
-  legacyPairing?: (onPaired: (deviceId: string) => void) => React.ReactNode
   // add-plant: schon gekoppelter, freier Sensor (z. B. aus dem Sensor-Detail); Sensor-Schritte entfallen.
   presetDeviceId?: string
   // Technik hinter der Sensor-Kopplung (Vorschau: mockPairing).
@@ -81,7 +77,6 @@ type OnboardingFlowProps = {
 
 // Schritte der Sensor-Kopplung, für Pfad und Fortschrittsleiste.
 const SENSOR_STEPS: Step[] = ['plugin', 'scan', 'wifi', 'connect', 'paired']
-const LEGACY_SENSOR_STEPS: Step[] = ['legacy-pair']
 // Einrichtung der gewählten Kanäle, in dieser Reihenfolge nach der Kanal-Auswahl.
 const CHANNEL_SETUP: { channel: NotifyChannel; step: Step }[] = [
   { channel: 'push', step: 'push-setup' },
@@ -108,18 +103,14 @@ export function OnboardingFlow({
   onExit,
   freePlants = [],
   onSkip,
-  legacyPairing,
   presetDeviceId,
   preview = false,
 }: OnboardingFlowProps) {
   const shell = React.useRef<AuthShellHelpers | null>(null)
-  const firstSensorStep: Step = legacyPairing ? 'legacy-pair' : 'plugin'
-  const [step, setStep] = React.useState<Step>(mode === 'pair-sensor' ? firstSensorStep : presetDeviceId ? 'plant' : 'start')
+  const [step, setStep] = React.useState<Step>(mode === 'pair-sensor' ? 'plugin' : presetDeviceId ? 'plant' : 'start')
   const [withSensor, setWithSensor] = React.useState(mode === 'pair-sensor')
   // pair-sensor: bestehende Pflanze, der der Sensor zugeordnet wird (null = neue Pflanze anlegen).
   const [assignedPlant, setAssignedPlant] = React.useState<{ id: string; name: string } | null>(null)
-  // Über den bestehenden Kopplungs-Baustein gekoppelter Sensor.
-  const [legacyDeviceId, setLegacyDeviceId] = React.useState<string | null>(presetDeviceId ?? null)
   const [isCompleting, setIsCompleting] = React.useState(false)
   const [completeError, setCompleteError] = React.useState('')
   const [speciesSearch, setSpeciesSearch] = React.useState('')
@@ -130,7 +121,14 @@ export function OnboardingFlow({
   const [character, setCharacter] = React.useState<PlantCharacter | null>(null)
   const [channels, setChannels] = React.useState<NotifyChannel[]>(['push'])
   // Sensor-Kopplung
-  const [scanState, setScanState] = React.useState<'searching' | 'found' | 'missing'>('searching')
+  const [scanState, setScanState] = React.useState<'searching' | 'choose' | 'connecting' | 'found' | 'missing'>('searching')
+  const [foundDevices, setFoundDevices] = React.useState<FoundDevice[]>([])
+  const [scanError, setScanError] = React.useState('')
+  const [pluginError, setPluginError] = React.useState('')
+  const [isPreparing, setIsPreparing] = React.useState(false)
+  // Sensor war schon über sein gespeichertes WLAN online (WLAN-Schritt entfällt); ssid falls bekannt.
+  const [alreadyOnline, setAlreadyOnline] = React.useState<{ ssid: string | null } | null>(null)
+  const stopOnlineWatch = React.useRef<(() => void) | null>(null)
   const [device, setDevice] = React.useState<{ deviceName: string; deviceId: string } | null>(null)
   const [networks, setNetworks] = React.useState<WifiNetwork[] | null>(null)
   const [ssid, setSsid] = React.useState<string | null>(null)
@@ -149,17 +147,31 @@ export function OnboardingFlow({
       if (cancelled) {
         return
       }
-      if (found) {
-        setDevice(found)
-        setScanState('found')
+      if (found.length === 1) {
+        void openDevice(found[0])
+      } else if (found.length > 1) {
+        setFoundDevices(found)
+        shell.current?.swap(() => setScanState('choose'))
       } else {
+        setScanError('')
         shell.current?.swap(() => setScanState('missing'))
       }
     })
     return () => {
       cancelled = true
     }
+    // openDevice ändert sich bei jedem Rendern, die Suche soll aber nur bei Schritt/Zustand neu starten.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pairing, scanState, step])
+
+  // Verbindung beim Verlassen des Ablaufs trennen.
+  React.useEffect(
+    () => () => {
+      stopOnlineWatch.current?.()
+      pairing.close()
+    },
+    [pairing],
+  )
 
   // WLAN-Liste vom Sensor holen, sobald der WLAN-Schritt offen ist.
   React.useEffect(() => {
@@ -183,7 +195,7 @@ export function OnboardingFlow({
   const setupSteps = CHANNEL_SETUP.filter((entry) => channels.includes(entry.channel)).map((entry) => entry.step)
   const plantSteps: Step[] = mode === 'pair-sensor' ? ['assign', ...(assignedPlant ? [] : (['plant', 'character'] as Step[]))] : ['plant', 'character']
   const path: Step[] = [
-    ...(withSensor ? (legacyPairing ? LEGACY_SENSOR_STEPS : SENSOR_STEPS) : []),
+    ...(withSensor ? SENSOR_STEPS : []),
     ...plantSteps,
     ...(mode === 'onboarding' ? (['channels', ...setupSteps] as Step[]) : []),
     'ready',
@@ -210,10 +222,39 @@ export function OnboardingFlow({
     }
   }
 
-  const startScan = () => {
+  const startScan = async () => {
+    setPluginError('')
+    setIsPreparing(true)
+    const prepared = await pairing.prepare()
+    setIsPreparing(false)
+    if (!prepared.ok) {
+      setPluginError(prepared.message)
+      return
+    }
     setScanState('searching')
     setDevice(null)
+    setAlreadyOnline(null)
     goTo('scan')
+  }
+
+  // Gewählten Sensor verbinden und zuordnen. Danach beobachten, ob er schon über sein WLAN online ist.
+  const openDevice = async (chosen: FoundDevice) => {
+    setDevice(chosen)
+    setScanState('connecting')
+    const opened = await pairing.open(chosen)
+    if (!opened.ok) {
+      setScanError(opened.message)
+      shell.current?.swap(() => setScanState('missing'))
+      return
+    }
+    setScanState('found')
+    setNetworks(null)
+    stopOnlineWatch.current?.()
+    stopOnlineWatch.current = pairing.watchAlreadyOnline(({ deviceId, ssid: onlineSsid }) => {
+      setDevice({ deviceName: chosen.deviceName, deviceId })
+      setAlreadyOnline({ ssid: onlineSsid })
+      goTo('paired')
+    })
   }
 
   const connect = () => {
@@ -222,6 +263,8 @@ export function OnboardingFlow({
     }
     setWifiError('')
     setReached([])
+    stopOnlineWatch.current?.()
+    stopOnlineWatch.current = null
     goTo('connect')
     void pairing
       .connect(ssid, wifiPassword, (stage) => setReached((current) => [...current, stage]))
@@ -231,7 +274,7 @@ export function OnboardingFlow({
           return
         }
         setWifiPassword('')
-        setWifiError(CONNECT_ERRORS[result.reason])
+        setWifiError(result.message ?? CONNECT_ERRORS[result.reason])
         goTo('wifi')
       })
   }
@@ -270,7 +313,7 @@ export function OnboardingFlow({
     setIsCompleting(true)
     const error = await onComplete?.({
       withSensor,
-      deviceId: legacyDeviceId ?? device?.deviceId ?? null,
+      deviceId: presetDeviceId ?? device?.deviceId ?? null,
       assignedPlantId: assignedPlant?.id ?? null,
       species,
       name: plantName,
@@ -297,20 +340,8 @@ export function OnboardingFlow({
       {(helpers) => {
         shell.current = helpers
 
-        if (step === 'legacy-pair' && legacyPairing) {
-          return (
-            <YStack gap="$12">
-              {legacyPairing((deviceId) => {
-                setLegacyDeviceId(deviceId)
-                goTo(stepAfter('legacy-pair'))
-              })}
-              <XStack paddingHorizontal="$4">{backLink(stepBefore('legacy-pair'))}</XStack>
-            </YStack>
-          )
-        }
-
         if (step === 'plugin') {
-          return <PlugInCard onNext={startScan} back={backLink(stepBefore('plugin'))} />
+          return <PlugInCard onNext={() => void startScan()} busy={isPreparing} error={pluginError} back={backLink(stepBefore('plugin'))} />
         }
 
         if (step === 'scan') {
@@ -318,6 +349,9 @@ export function OnboardingFlow({
             <ScanCard
               state={scanState}
               deviceName={device?.deviceName}
+              devices={foundDevices}
+              error={scanError}
+              onChoose={(chosen) => shell.current?.swap(() => void openDevice(chosen))}
               onRetry={() => shell.current?.swap(() => setScanState('searching'))}
               onNext={() => goTo('wifi')}
               back={backLink('plugin')}
@@ -374,7 +408,8 @@ export function OnboardingFlow({
           return (
             <PairedCard
               deviceName={device?.deviceName ?? 'Dein Sensor'}
-              ssid={ssid ?? ''}
+              ssid={alreadyOnline ? alreadyOnline.ssid ?? '' : ssid ?? ''}
+              alreadyOnline={Boolean(alreadyOnline)}
               nextLabel={mode === 'pair-sensor' ? 'Weiter' : 'Weiter zur Pflanze'}
               onNext={() => goTo(stepAfter('paired'))}
             />
@@ -554,7 +589,7 @@ export function OnboardingFlow({
               <Button
                 onPress={() => {
                   setWithSensor(true)
-                  goTo(firstSensorStep)
+                  goTo('plugin')
                 }}
               >
                 Ja, Sensor koppeln
@@ -584,7 +619,7 @@ export function OnboardingFlow({
             <Button
               onPress={() => {
                 setWithSensor(true)
-                goTo(firstSensorStep)
+                goTo('plugin')
               }}
             >
               Ich habe einen Sensor
