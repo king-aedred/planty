@@ -1,0 +1,5 @@
+pcb_placed.step
+__pycache__/
+node_modules/
+# Groß (je ~16 MB), per export_glb.py / animate_glb.mjs neu erzeugbar
+*.glb
