@@ -197,6 +197,13 @@ def window_plug() -> cq.Workplane:
     return plug.rotate((0, 0, 0), (0, 0, 1), angle).translate((0, 0, lz))
 
 
+def window_plug_print() -> cq.Workplane:
+    """Fenstereinsatz in Druckausrichtung: flache Innenseite auf dem Druckbett (z = 0), Rundung oben."""
+    plug = cq.Workplane("YZ").workplane(offset=R_IN + WINDOW_LIP).circle(WINDOW_R + WINDOW_PRESS).extrude(5)
+    plug = plug.intersect(cylinder(R_OUT, 20, -10))
+    return plug.rotate((0, 0, 0), (0, 1, 0), -90).translate((0, 0, -(R_IN + WINDOW_LIP)))
+
+
 def bayonet_pins() -> cq.Workplane:
     """Stifte innen am Kopfrand (Endlage), Unterseite 45° angeschrägt (druckbar, findet die Nut)."""
     r_wall = R_SPIGOT + FIT
@@ -254,6 +261,12 @@ def head() -> cq.Workplane:
     h = h.union(rail.union(fence).union(cap).intersect(cavity))
     h = h.cut(box(HOOK_X0 - 0.5, R_IN + 1, HOOK_Y0 - 2.5, groove_y0 + 0.01, Z_PCB0 - HOOK_LEN - 8, Z_PCB0).intersect(cavity))
     h = h.union(pcb_hook().intersect(cylinder(R_IN + 0.5, Z_HEAD_TOP, 0)))
+    # Unterseite von Schiene und Anschlag über dem Haken: 45° zur Wand statt waagerecht (druckbar);
+    # beginnt neben der Zunge, damit Hohlraum und Federweg frei bleiben
+    x_ch = PCB_EDGE_X + PCB_W + 0.5
+    chamfer = cq.Workplane("XZ").polyline([(x_ch, Z_PCB0), (R_IN + 0.5, Z_PCB0), (R_IN + 0.5, Z_PCB0 - (R_IN + 0.5 - x_ch))]).close()
+    chamfer = chamfer.extrude(-(groove_y1 + 1.5 - (groove_y0 - 1.5))).translate((0, groove_y0 - 1.5, 0))
+    h = h.union(chamfer.intersect(cavity))
     # Klemmrippen am seitlichen Anschlag: drücken die Platine gegen die Wand und halten sie per Reibung (kein Kleber).
     # Sie verformen sich beim ersten Einschieben etwas und gleichen so Drucktoleranzen aus.
     for z0 in (Z_PCB0 + 4, Z_PCB0 + 24):
@@ -308,7 +321,7 @@ if __name__ == "__main__":
     b, h = body(), head()
     cq.exporters.export(b, str(OUT / "body.stl"), tolerance=0.02, angularTolerance=0.1)
     cq.exporters.export(h, str(OUT / "head.stl"), tolerance=0.02, angularTolerance=0.1)
-    cq.exporters.export(window_plug(), str(OUT / "window.stl"), tolerance=0.01, angularTolerance=0.1)
+    cq.exporters.export(window_plug_print(), str(OUT / "window.stl"), tolerance=0.01, angularTolerance=0.1)
     cq.exporters.export(cq.Assembly().add(b, name="body").add(h, name="head").add(window_plug(), name="window").toCompound(), str(OUT / "case.step"))
     print(f"Außen Ø {2 * R_OUT:.1f} x {Z_HEAD_TOP + DOME_H:.1f} mm, Sonde ragt {PROBE_LEN - PROBE_INSIDE:.0f} mm heraus")
     print(f"Rohr 0..{Z_SPIGOT_TOP:.1f}, Kopf {Z_SHOULDER:.1f}..{Z_HEAD_TOP + DOME_H:.1f}, Zelle {Z_CELL0:.1f}..{Z_CELL_TOP:.1f}")
