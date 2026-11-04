@@ -103,7 +103,7 @@ Nachtdaten 23.–26.10. mit 7.0.10: keine Doppelmessungen, alle Slots pünktlich
 
 ### Backend
 - **`NOTIFY_DRY_RUN` ist noch gesetzt** (Stand 26.10.). Live: `npx convex env remove NOTIFY_DRY_RUN`, vorher ggf. `alert_state` von `cg-00A5D8` zurücksetzen.
-- Kontaktzeitfenster wird in **UTC-Stunden** gelesen statt Europe/Berlin (betrifft Pflanzen- und Sensormeldungen).
+- ~~Kontaktzeitfenster in UTC-Stunden~~ erledigt 03.11.: Backend (`processor.ts`) und Convex (`sensor_alerts.ts`) rechnen in Europe/Berlin, inkl. Sommer-/Winterzeit.
 - Benachrichtigungen kommen mit v7 pro Messzyklus, begrenzt nur durch `max_notifications_per_day` (Standard 1). Bestätigen.
 - n8n-Workflows exportieren und ins Repo (`n8n/`); prüfen, ob `battery_low`, `battery_critical`, `offline` verarbeitet werden.
 - Convex-Plan klären (Free: 1 Mio. Aufrufe/Monat; ein Gerät dauerhaft am USB ≈ 518 000/Monat).

@@ -56,7 +56,13 @@ const berlinDay = (timestamp: number) =>
 
 const sentToday = (sentAt: number | undefined, now: number) => sentAt !== undefined && berlinDay(sentAt) === berlinDay(now);
 
-// Gleiche Logik wie isOutsideContactWindow in backend/src/lib/processor.ts (Stunden in UTC).
+// Volle Stunde in deutscher Ortszeit (0–23); das Kontaktfenster wird in der App so eingestellt.
+const berlinHour = (timestamp: number) =>
+  Number(
+    new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Berlin", hour: "2-digit", hourCycle: "h23" }).format(new Date(timestamp)),
+  );
+
+// Gleiche Logik wie isOutsideContactWindow in backend/src/lib/processor.ts (Stunden in Ortszeit).
 const isOutsideContactWindow = (currentHour: number, start: number, end: number) =>
   start < end ? currentHour < start || currentHour >= end : currentHour < start && currentHour >= end;
 
@@ -141,7 +147,7 @@ export const checkSensorAlerts = internalMutation({
         !isTestDevice(sensor.device_id) &&
         start !== undefined &&
         end !== undefined &&
-        isOutsideContactWindow(new Date(now).getUTCHours(), start, end)
+        isOutsideContactWindow(berlinHour(now), start, end)
       ) {
         // Nicht senden, Zustand nicht ändern: Der nächste Lauf im Fenster holt die Meldung nach.
         for (const kind of kinds) results.push({ device_id: sensor.device_id, kind, outcome: "outside_window" });

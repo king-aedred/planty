@@ -173,7 +173,9 @@ type NotificationOptions = {
     is_thank_you?: boolean
 }
 
-const getCurrentUtcHour = (): number => new Date().getUTCHours()
+// Volle Stunde in deutscher Ortszeit (0–23); das Kontaktfenster wird in der App so eingestellt.
+const getCurrentLocalHour = (): number =>
+    Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Berlin', hour: '2-digit', hourCycle: 'h23' }).format(new Date()))
 
 const getPlantMessageWindowState = async (clerkId: string): Promise<UserLookup | null> => {
     const api = anyApi
@@ -222,7 +224,7 @@ const createInboxMessage = async (
         contactWindowEnd !== undefined &&
         contactWindowEnd !== null
     ) {
-        const currentHour = getCurrentUtcHour()
+        const currentHour = getCurrentLocalHour()
 
         if (isOutsideContactWindow(currentHour, contactWindowStart, contactWindowEnd)) {
             console.log('[processor] Außerhalb Kontaktzeitfenster, externe Benachrichtigung übersprungen', {
